@@ -55,11 +55,23 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
   policy_logits = tf.convert_to_tensor(policy_logits, dtype=tf.float32)
   actions = tf.convert_to_tensor(actions, dtype=tf.int32)
 
-  policy_logits.shape.assert_has_rank(3)
-  actions.shape.assert_has_rank(2)
+  ##policy_logits.shape.assert_has_rank(3)
+  ##actions.shape.assert_has_rank(2)
 
-  return -tf.nn.sparse_softmax_cross_entropy_with_logits(
-      logits=policy_logits, labels=actions)
+  policy_logits = tf.transpose(policy_logits, perm=[2, 0, 1, 3])
+  actions = tf.transpose(actions, perm=[2, 0, 1])
+
+  print("inlog", policy_logits, actions)
+
+  result = tf.ones([actions.shape[1], actions.shape[2]])
+  for i in range(actions.shape[0]):
+    result = result * tf.nn.sparse_softmax_cross_entropy_with_logits(logits=policy_logits[i], labels=actions[i])
+
+  result = -result
+
+  print("log_res", result)
+
+  return result
 
 
 def from_logits(
@@ -129,9 +141,9 @@ def from_logits(
 
   # Make sure tensor ranks are as expected.
   # The rest will be checked by from_action_log_probs.
-  behaviour_policy_logits.shape.assert_has_rank(3)
-  target_policy_logits.shape.assert_has_rank(3)
-  actions.shape.assert_has_rank(2)
+  #!!behaviour_policy_logits.shape.assert_has_rank(3)
+  #!! target_policy_logits.shape.assert_has_rank(3)
+  #!! actions.shape.assert_has_rank(2)
 
   with tf.name_scope(name):
     target_action_log_probs = log_probs_from_logits_and_actions(

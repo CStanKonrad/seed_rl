@@ -19,6 +19,7 @@ from absl import logging
 
 import gym
 from seed_rl.football import observation
+from seed_rl.football.env_composer import sample_composed_environment
 
 FLAGS = flags.FLAGS
 
@@ -41,9 +42,5 @@ def create_environment(_):
       'medium': (120, 90),
       'large': (144, 108),
   }[FLAGS.smm_size]
-  env = gym.make(
-      'gfootball:GFootball-%s-SMM-v0' % FLAGS.game,
-      stacked=True,
-      rewards=FLAGS.reward_experiment,
-      channel_dimensions=channel_dimensions)
+  env = sample_composed_environment()
   return observation.PackedBitsObservation(env)

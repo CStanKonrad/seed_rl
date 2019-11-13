@@ -21,7 +21,7 @@ source $DIR/setup.sh
 export CONFIG=football
 export ENVIRONMENT=football
 export AGENT=vtrace
-export WORKERS=25
+export WORKERS=3
 export ACTORS_PER_WORKER=8
 
 cat > /tmp/config.yaml <<EOF
@@ -52,18 +52,18 @@ trainingInput:
       - scoring
     - parameterName: inference_batch_size
       type: INTEGER
-      minValue: 64
-      maxValue: 64
+      minValue: 4
+      maxValue: 4
       scaleType: UNIT_LOG_SCALE
     - parameterName: batch_size
       type: INTEGER
-      minValue: 32
-      maxValue: 32
+      minValue: 4
+      maxValue: 4
       scaleType: UNIT_LOG_SCALE
     - parameterName: unroll_length
       type: INTEGER
-      minValue: 32
-      maxValue: 32
+      minValue: 4
+      maxValue: 4
       scaleType: UNIT_LOG_SCALE
     - parameterName: total_environment_frames
       type: INTEGER

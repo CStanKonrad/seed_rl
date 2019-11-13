@@ -34,6 +34,10 @@ flags.DEFINE_integer('num_actors_with_summaries', 4,
                      'summaries.')
 
 
+class fake_client:
+  def inference(self, arg):
+    return tf.Variable(5)
+
 def are_summaries_enabled():
   return FLAGS.task < FLAGS.num_actors_with_summaries
 
