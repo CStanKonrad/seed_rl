@@ -35,9 +35,9 @@ def policy_gradient(logits, actions, advantages):
   logits = tf.transpose(logits, perm=[2, 0, 1, 3])
   actions = tf.transpose(actions, perm=[2, 0, 1])
   print("pg_log_act:", logits, actions)
-  result = tf.ones([actions.shape[1], actions.shape[2]])
+  result = tf.zeros([actions.shape[1], actions.shape[2]])
   for i in range(actions.shape[0]):
-    result = result * tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits[i], labels=actions[i])
+    result = result + tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits[i], labels=actions[i])
   cross_entropy = result
   advantages = tf.stop_gradient(advantages)
   policy_gradient_loss_per_timestep = cross_entropy * advantages

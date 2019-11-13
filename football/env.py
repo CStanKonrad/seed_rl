@@ -35,7 +35,7 @@ flags.DEFINE_integer('num_action_repeats', 1, 'Number of action repeats.')
 
 def create_environment(_):
   """Returns a gym Football environment."""
-  logging.info('Creating environment: %s', FLAGS.game)
+  logging.info('Creating environment: psw %s', FLAGS.game)
   assert FLAGS.num_action_repeats == 1, 'Only action repeat of 1 is supported.'
   channel_dimensions = {
       'default': (96, 72),

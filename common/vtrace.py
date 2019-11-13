@@ -63,9 +63,9 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
 
   print("inlog", policy_logits, actions)
 
-  result = tf.ones([actions.shape[1], actions.shape[2]])
+  result = tf.zeros([actions.shape[1], actions.shape[2]])
   for i in range(actions.shape[0]):
-    result = result * tf.nn.sparse_softmax_cross_entropy_with_logits(logits=policy_logits[i], labels=actions[i])
+    result = result + tf.nn.sparse_softmax_cross_entropy_with_logits(logits=policy_logits[i], labels=actions[i])
 
   result = -result
 
