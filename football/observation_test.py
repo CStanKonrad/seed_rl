@@ -20,6 +20,7 @@ import numpy as np
 from seed_rl.common import utils
 from seed_rl.football import observation
 import tensorflow as tf
+from seed_rl.football.env_composer import sample_composed_environment
 
 
 class UtilsTest(tf.test.TestCase, parameterized.TestCase):
@@ -29,11 +30,12 @@ class UtilsTest(tf.test.TestCase, parameterized.TestCase):
       (True),
   )
   def test_packed_bits(self, stacked):
-    env = gym.make(
-        'gfootball:GFootball-11_vs_11_easy_stochastic-SMM-v0', stacked=stacked)
+    env = sample_composed_environment()#gym.make(
+        #'gfootball:GFootball-11_vs_11_easy_stochastic-SMM-v0', stacked=stacked)
     env.reset()
     for _ in range(10):
       obs, _, done, _ = env.step(env.action_space.sample())
+      print(obs.dtype)
 
       baseline_obs = tf.cast(np.array(obs), tf.float32)
 
