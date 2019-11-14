@@ -60,7 +60,7 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
     actions.shape.assert_has_rank(2)
     return -tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits=policy_logits, labels=actions)
-  else
+  else:
     policy_logits = tf.transpose(policy_logits, perm=[2, 0, 1, 3])
     actions = tf.transpose(actions, perm=[2, 0, 1])
     results = [tf.nn.sparse_softmax_cross_entropy_with_logits(
