@@ -101,9 +101,9 @@ class GFootball(tf.Module):
     self._has_discrete_actions = not isinstance(num_actions_or_action_space,
                                                    gym.spaces.Space)
     if self._has_discrete_actions:
-      self._num_actions = num_actions
+      self._num_actions = num_actions_or_action_space
     else:
-      self._action_space = action_space
+      self._action_space = num_actions_or_action_space
 
     # Parameters and layers for _torso.
     self._stacks = [

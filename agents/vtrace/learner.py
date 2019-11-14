@@ -19,6 +19,7 @@ import collections
 import concurrent.futures
 import math
 import time
+import gym
 
 from absl import flags
 from absl import logging
