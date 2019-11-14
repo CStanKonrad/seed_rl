@@ -55,23 +55,19 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
   policy_logits = tf.convert_to_tensor(policy_logits, dtype=tf.float32)
   actions = tf.convert_to_tensor(actions, dtype=tf.int32)
 
-  ##policy_logits.shape.assert_has_rank(3)
-  ##actions.shape.assert_has_rank(2)
-
-  policy_logits = tf.transpose(policy_logits, perm=[2, 0, 1, 3])
-  actions = tf.transpose(actions, perm=[2, 0, 1])
-
-  print("inlog", policy_logits, actions)
-
-  result = tf.zeros([actions.shape[1], actions.shape[2]])
-  for i in range(actions.shape[0]):
-    result = result + tf.nn.sparse_softmax_cross_entropy_with_logits(logits=policy_logits[i], labels=actions[i])
-
-  result = -result
-
-  print("log_res", result)
-
-  return result
+  if len(policy_logits.shape) != 4:
+    policy_logits.shape.assert_has_rank(3)
+    actions.shape.assert_has_rank(2)
+    return -tf.nn.sparse_softmax_cross_entropy_with_logits(
+        logits=policy_logits, labels=actions)
+  else
+    policy_logits = tf.transpose(policy_logits, perm=[2, 0, 1, 3])
+    actions = tf.transpose(actions, perm=[2, 0, 1])
+    results = [tf.nn.sparse_softmax_cross_entropy_with_logits(
+        logits=policy_logits[i], labels=actions[i])
+        for i in range(actions.shape[0])]
+    result = np.reduce_mean(results)
+    return -result
 
 
 def from_logits(
@@ -141,9 +137,14 @@ def from_logits(
 
   # Make sure tensor ranks are as expected.
   # The rest will be checked by from_action_log_probs.
-  #!!behaviour_policy_logits.shape.assert_has_rank(3)
-  #!! target_policy_logits.shape.assert_has_rank(3)
-  #!! actions.shape.assert_has_rank(2)
+  if len(behaviour_policy_logits.shape) != 4:
+    behaviour_policy_logits.shape.assert_has_rank(3)
+    target_policy_logits.shape.assert_has_rank(3)
+    actions.shape.assert_has_rank(2)
+  else:
+    behaviour_policy_logits.shape.assert_has_rank(4)
+    target_policy_logits.shape.assert_has_rank(4)
+    actions.shape.assert_has_rank(3)
 
   with tf.name_scope(name):
     target_action_log_probs = log_probs_from_logits_and_actions(

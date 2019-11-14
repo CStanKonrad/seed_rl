@@ -19,7 +19,6 @@ from absl import logging
 
 import gym
 from seed_rl.football import observation
-from seed_rl.football.env_composer import sample_composed_environment
 
 FLAGS = flags.FLAGS
 
@@ -35,12 +34,16 @@ flags.DEFINE_integer('num_action_repeats', 1, 'Number of action repeats.')
 
 def create_environment(_):
   """Returns a gym Football environment."""
-  logging.info('Creating environment: psw %s', FLAGS.game)
+  logging.info('Creating environment: %s', FLAGS.game)
   assert FLAGS.num_action_repeats == 1, 'Only action repeat of 1 is supported.'
   channel_dimensions = {
       'default': (96, 72),
       'medium': (120, 90),
       'large': (144, 108),
   }[FLAGS.smm_size]
-  env = sample_composed_environment()
+  env = gym.make(
+      'gfootball:GFootball-%s-SMM-v0' % FLAGS.game,
+      stacked=True,
+      rewards=FLAGS.reward_experiment,
+      channel_dimensions=channel_dimensions)
   return observation.PackedBitsObservation(env)

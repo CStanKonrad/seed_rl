@@ -20,7 +20,7 @@ from absl import flags
 from absl import logging
 import numpy as np
 from seed_rl import grpc
-from seed_rl.common import common_flags  
+from seed_rl.common import common_flags
 from seed_rl.common import profiling
 from seed_rl.common import utils
 import tensorflow as tf
@@ -33,10 +33,6 @@ flags.DEFINE_integer('num_actors_with_summaries', 4,
                      'Number of actors that will log debug/profiling TF '
                      'summaries.')
 
-
-class fake_client:
-  def inference(self, arg):
-    return tf.Variable(5)
 
 def are_summaries_enabled():
   return FLAGS.task < FLAGS.num_actors_with_summaries

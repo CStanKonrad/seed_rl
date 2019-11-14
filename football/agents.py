@@ -29,7 +29,7 @@ class _Stack(tf.Module):
   """Stack of pooling and convolutional blocks with residual connections."""
 
   def __init__(self, num_ch, num_blocks):
-    
+
     super(_Stack, self).__init__(name='stack')
     self._conv = tf.keras.layers.Conv2D(num_ch, 3, strides=1, padding='same',
                                         kernel_initializer='lecun_normal')
@@ -67,44 +67,25 @@ class _Stack(tf.Module):
 
 
 def make_logits(layer_fn, action_space):
-    if isinstance(action_space, gym.spaces.Discrete):
-        return layer_fn(action_space.n, 'policy_logits')
-    else:
-        print(layer_fn(0, 'policy_logits'))
-        return [layer_fn(n, 'policy_logits') for n in action_space.nvec]
+  return [layer_fn(n, 'policy_logits') for n in action_space.nvec]
 
 
 def apply_net(action_space, policy_logits, core_output):
-    print('apply_net:')
-    if isinstance(action_space, gym.spaces.Discrete):
-        return policy_logits(core_output)
-    else:
-        n_actions = action_space.nvec.shape[0]
-        arr = [policy_logits[i](core_output) for i in range(n_actions)]
-        arr = tf.stack(arr)
-        print('a_n_before:', arr)
-        arr = tf.transpose(arr, perm=[1, 0, 2])
-        print('a_n_after', arr)
-        return arr
+  n_actions = action_space.nvec.shape[0]
+  arr = [policy_logits[i](core_output) for i in range(n_actions)]
+  arr = tf.stack(arr)
+  arr = tf.transpose(arr, perm=[1, 0, 2])
+  return arr
 
 
 def sample_action(action_space, policy_logits):
-    print('sample_action')
-    if isinstance(action_space, gym.spaces.Discrete):
-        new_action = tf.random.categorical(policy_logits, 1, dtype=tf.int32)
-        new_action = tf.squeeze(new_action, 1, name='action')
-        return new_action
-    else:
-        n_actions = action_space.nvec.shape[0]
-        policy_logits = tf.transpose(policy_logits, perm=[1, 0, 2])
-        print("s_a_pl:", policy_logits)
-        print(tf.random.categorical(policy_logits[0], 1, dtype=tf.int32))
-        new_action = tf.stack([tf.squeeze(tf.random.categorical(policy_logits[i], 1, dtype=tf.int32), 1) for i in range(n_actions)])
-        print("s_a_pl_a:")
-        print('s_a_before', new_action)
-        new_action = tf.transpose(new_action, perm=[1, 0])
-        print('s_a_after', new_action)
-        return new_action
+  n_actions = action_space.nvec.shape[0]
+  policy_logits = tf.transpose(policy_logits, perm=[1, 0, 2])
+  new_action = tf.stack([tf.squeeze(
+    tf.random.categorical(
+      policy_logits[i], 1, dtype=tf.int32), 1) for i in range(n_actions)])
+  new_action = tf.transpose(new_action, perm=[1, 0])
+  return new_action
 
 
 class GFootball(tf.Module):
@@ -113,11 +94,16 @@ class GFootball(tf.Module):
   Four blocks instead of three in ImpalaAtariDeep.
   """
 
-  def __init__(self, action_space):
+  def __init__(self, num_actions_or_action_space):
     super(GFootball, self).__init__(name='gfootball')
 
     # Parameters and layers for unroll.
-    self._action_space = action_space
+    self._has_discrete_actions = not isinstance(num_actions_or_action_space,
+                                                   gym.spaces.Space)
+    if self._has_discrete_actions:
+      self._num_actions = num_actions
+    else:
+      self._action_space = action_space
 
     # Parameters and layers for _torso.
     self._stacks = [
@@ -128,12 +114,18 @@ class GFootball(tf.Module):
         256, kernel_initializer='lecun_normal')
 
     # Layers for _head.
-
-
-    self._policy_logits = make_logits(lambda num_units, name: tf.keras.layers.Dense(
-        num_units,
-        name=name,
-        kernel_initializer='lecun_normal'), self._action_space)
+    if self._has_discrete_actions:
+      self._policy_logits = tf.keras.layers.Dense(
+          self._num_actions,
+          name='policy_logits',
+          kernel_initializer='lecun_normal')
+    else:
+      self._policy_logits = make_logits(
+          lambda num_units, name: tf.keras.layers.Dense(
+            num_units,
+            name=name,
+            kernel_initializer='lecun_normal'),
+          self._action_space)
     self._baseline = tf.keras.layers.Dense(
         1, name='baseline', kernel_initializer='lecun_normal')
 
@@ -157,11 +149,21 @@ class GFootball(tf.Module):
     return tf.nn.relu(conv_out)
 
   def _head(self, core_output):
-    policy_logits = apply_net(self._action_space, self._policy_logits, core_output)
+    if self._has_discrete_actions:
+      policy_logits = self._policy_logits(core_output)
+    else:
+      policy_logits = apply_net(
+          self._action_space,
+          self._policy_logits,
+          core_output)
     baseline = tf.squeeze(self._baseline(core_output), axis=-1)
 
     # Sample an action from the policy.
-    new_action = sample_action(self._action_space, policy_logits)
+    if self._has_discrete_actions:
+      new_action = tf.random.categorical(policy_logits, 1, dtype=tf.int32)
+      new_action = tf.squeeze(new_action, 1, name='action')
+    else:
+      new_action = sample_action(self._action_space, policy_logits)
 
     return AgentOutput(new_action, policy_logits, baseline)
 

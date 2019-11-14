@@ -24,20 +24,13 @@ from absl import flags
 from absl import logging
 
 from seed_rl import grpc
-from seed_rl.common import common_flags  
+from seed_rl.common import common_flags
 from seed_rl.common import losses
 from seed_rl.common import utils
 from seed_rl.common import vtrace
 
 import tensorflow as tf
 
-class fake_server:
-    def start(self):
-        return
-    def bind(self, inference, batched=True):
-        return
-    def shutdown(self):
-        return
 
 
 
@@ -152,13 +145,24 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       tf.TensorSpec(env.observation_space.shape, env.observation_space.dtype,
                     'observation'),
   )
-  action_space = env.action_space
-  action_specs = tf.TensorSpec(shape=(action_space.nvec.shape[0],), dtype=tf.int32, name='action')
+  if isinstance(env.action_space, gym.spaces.Discrete):
+    # If we use discrete action space, then we use the old implmentation.
+    num_actions = env.action_space.n
+    action_specs = tf.TensorSpec([], tf.int32, 'action')
+  else:
+    # In other case use changed implementation - it allows us to use other types
+    # of observation spaces.
+    action_space = env.action_space
+    action_specs = tf.TensorSpec(shape=(action_space.nvec.shape[0],),
+                                 dtype=tf.int32, name='action')
 
   agent_input_specs = (action_specs, env_output_specs)
 
   # Initialize agent and variables.
-  agent = create_agent_fn(env_output_specs, action_space)
+  if isinstance(env.action_space, gym.spaces.Discrete):
+    agent = create_agent_fn(env_output_specs, num_actions)
+  else:
+    agent = create_agent_fn(env_output_specs, action_space)
   initial_agent_state = agent.initial_state(1)
   agent_state_specs = tf.nest.map_structure(
       lambda t: tf.TensorSpec(t.shape[1:], t.dtype), initial_agent_state)
@@ -181,8 +185,8 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
 
     iterations = optimizer.iterations
-    optimizer._create_hypers()  
-    optimizer._create_slots(agent.trainable_variables)  
+    optimizer._create_hypers()
+    optimizer._create_slots(agent.trainable_variables)
 
     # ON_READ causes the replicated variable to act as independent variables for
     # each replica.
