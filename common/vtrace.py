@@ -66,7 +66,7 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
     results = [tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits=policy_logits[i], labels=actions[i])
         for i in range(actions.shape[0])]
-    result = np.reduce_mean(results)
+    result = tf.reduce_mean(results, 0)
     return -result
 
 
