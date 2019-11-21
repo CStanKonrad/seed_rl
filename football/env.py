@@ -21,8 +21,6 @@ import gym
 import json
 from seed_rl.football import observation
 
-from seed_rl.custom_code.env_composer import config_compose_environment
-
 FLAGS = flags.FLAGS
 
 # Environment settings.
@@ -33,5 +31,5 @@ def create_environment(_):
   """Returns a gym Football environment."""
   logging.info('Creating environment: %s', FLAGS.env_config)
   config = json.loads(FLAGS.env_config)
-  env = config_compose_environment(config)
-  return observation.PackedBitsObservation(env)
+  return observation.PackedBitsObservation(
+    gym.make('gfootball_zpp:gfootball-custom-v1', **config))
