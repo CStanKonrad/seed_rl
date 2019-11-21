@@ -44,9 +44,11 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
   NUM_ACTIONS refers to the number of actions.
 
   Args:
-    policy_logits: A float32 tensor of shape [T, B, NUM_ACTIONS] with
+    policy_logits: A float32 tensor of shape [T, B, NUM_ACTIONS]
+      (or [T, B, NUM_CAT, NUM_ACTIONS] when action space is multidiscrete) with
       un-normalized log-probabilities parameterizing a softmax policy.
-    actions: An int32 tensor of shape [T, B] with actions.
+    actions: An int32 tensor of shape [T, B]
+      (or [T, B, NUM_CAT] when action space is multidiscrete) with actions.
 
   Returns:
     A float32 tensor of shape [T, B] corresponding to the sampling log
@@ -55,18 +57,20 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
   policy_logits = tf.convert_to_tensor(policy_logits, dtype=tf.float32)
   actions = tf.convert_to_tensor(actions, dtype=tf.int32)
 
-  if len(policy_logits.shape) != 4:
+  if len(actions.shape) == 2:
+    # discrete action space
     policy_logits.shape.assert_has_rank(3)
     actions.shape.assert_has_rank(2)
     return -tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits=policy_logits, labels=actions)
   else:
+    # multidiscrete action space
     policy_logits = tf.transpose(policy_logits, perm=[2, 0, 1, 3])
     actions = tf.transpose(actions, perm=[2, 0, 1])
     results = [tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits=policy_logits[i], labels=actions[i])
         for i in range(actions.shape[0])]
-    result = tf.reduce_mean(results, 0)
+    result = tf.reduce_sum(results, 0)
     return -result
 
 
@@ -92,12 +96,16 @@ def from_logits(
   NUM_ACTIONS refers to the number of actions.
 
   Args:
-    behaviour_policy_logits: A float32 tensor of shape [T, B, NUM_ACTIONS] with
+    behaviour_policy_logits: A float32 tensor of shape [T, B, NUM_ACTIONS]
+      (or [T, B, NUM_CAT, NUM_ACTIONS] when action space is multidiscrete) with
       un-normalized log-probabilities parametrizing the softmax behaviour
       policy.
-    target_policy_logits: A float32 tensor of shape [T, B, NUM_ACTIONS] with
+    target_policy_logits: A float32 tensor of shape [T, B, NUM_ACTIONS]
+      (or [T, B, NUM_CAT, NUM_ACTIONS] when action space is multidiscrete) with
       un-normalized log-probabilities parametrizing the softmax target policy.
-    actions: An int32 tensor of shape [T, B] of actions sampled from the
+    actions: An int32 tensor of shape [T, B]
+      (or [T, B, NUM_CAT] when action space is multidiscrete)
+      of actions sampled from the
       behaviour policy.
     discounts: A float32 tensor of shape [T, B] with the discount encountered
       when following the behaviour policy.
