@@ -32,10 +32,12 @@ def entropy(logits):
 
 
 def policy_gradient(logits, actions, advantages):
-  if len(logits.shape) != 4:
+  if len(actions.shape) == 2:
+    # discrete action space
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels=actions, logits=logits)
   else:
+    # multidiscrete action space
     logits = tf.transpose(logits, perm=[2, 0, 1, 3])
     actions = tf.transpose(actions, perm=[2, 0, 1])
     results = [tf.nn.sparse_softmax_cross_entropy_with_logits(
