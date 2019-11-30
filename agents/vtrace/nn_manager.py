@@ -39,7 +39,8 @@ class NNManager():
   def create_variables(self):
     self.trainable_variables = []
     for i in range(self._num_networks):
-      self.trainable_variables.append(list(self._network[i].trainable_variables))
+      for var in self._network[i].trainable_variables:
+        self.trainable_variables.append(var)
     self.trainable_variables = tuple(self.trainable_variables)
 
   def initial_state(self, batch_size):
