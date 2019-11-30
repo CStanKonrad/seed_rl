@@ -32,6 +32,7 @@ from seed_rl.common import vtrace
 
 import tensorflow as tf
 
+from .nn_manager import NNManager
 
 
 
@@ -57,6 +58,9 @@ flags.DEFINE_float('max_abs_reward', 1.,
 # Actors
 flags.DEFINE_integer('num_actors', 4, 'Number of actors.')
 
+#Network Manger config
+flags.DEFINE_string('nnm_conf', 'todo', 'Neural Network Manager config')
+
 
 FLAGS = flags.FLAGS
 
@@ -81,6 +85,12 @@ def compute_loss(agent, agent_state, prev_actions, env_outputs, agent_outputs):
     rewards = tf.clip_by_value(rewards, -FLAGS.max_abs_reward,
                                FLAGS.max_abs_reward)
   discounts = tf.cast(~done, tf.float32) * FLAGS.discounting
+  logging.info('discounts before %s', str(discounts))
+  discounts = tf.expand_dims(discounts, -1)
+  rep_m = [1] * len(discounts.shape)
+  rep_m[-1] = learner_outputs.baseline.shape[-1]
+  discounts = tf.tile(discounts, rep_m)
+  logging.info('discounts after %s', str(discounts))
 
   # Compute V-trace returns and weights.
   vtrace_returns = vtrace.from_logits(
@@ -92,6 +102,8 @@ def compute_loss(agent, agent_state, prev_actions, env_outputs, agent_outputs):
       values=learner_outputs.baseline,
       bootstrap_value=bootstrap_value,
       lambda_=FLAGS.lambda_)
+
+  logging.info('vtrace returned %s', str(vtrace_returns))
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
@@ -140,8 +152,9 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   settings = utils.init_learner(FLAGS.num_training_tpus)
   strategy, inference_devices, training_strategy, encode, decode = settings
   env = create_env_fn(0)
+  number_of_players = env.action_space.nvec.shape[0]
   env_output_specs = utils.EnvOutput(
-      tf.TensorSpec([], tf.float32, 'reward'),
+      tf.TensorSpec([number_of_players], tf.float32, 'reward'),
       tf.TensorSpec([], tf.bool, 'done'),
       tf.TensorSpec(env.observation_space.shape, env.observation_space.dtype,
                     'observation'),
@@ -160,10 +173,10 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   agent_input_specs = (action_specs, env_output_specs)
 
   # Initialize agent and variables.
-  if isinstance(env.action_space, gym.spaces.Discrete):
-    agent = create_agent_fn(env_output_specs, num_actions)
-  else:
-    agent = create_agent_fn(env_output_specs, action_space)
+  agent = NNManager(create_agent_fn, env_output_specs, action_space, FLAGS.logdir, FLAGS.save_checkpoint_secs, {
+    'networks_actions': action_space.nvec
+  })
+
   initial_agent_state = agent.initial_state(1)
   agent_state_specs = tf.nest.map_structure(
       lambda t: tf.TensorSpec(t.shape[1:], t.dtype), initial_agent_state)
@@ -177,6 +190,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       return agent(*decode(args))
 
     initial_agent_output, _ = create_variables(input_, initial_agent_state)
+    agent.create_variables()
     # Create optimizer.
     iter_frame_ratio = (
         FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats)
@@ -225,14 +239,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       FLAGS.logdir, flush_millis=20000, max_queue=1000)
 
   # Setup checkpointing and restore checkpoint.
-  ckpt = tf.train.Checkpoint(agent=agent, optimizer=optimizer)
-  manager = tf.train.CheckpointManager(
-      ckpt, FLAGS.logdir, max_to_keep=1, keep_checkpoint_every_n_hours=6)
-  last_ckpt_time = 0  # Force checkpointing of the initial model.
-  if manager.latest_checkpoint:
-    logging.info('Restoring checkpoint: %s', manager.latest_checkpoint)
-    ckpt.restore(manager.latest_checkpoint).assert_consumed()
-    last_ckpt_time = time.time()
+  agent.make_checkpoints(optimizer)
 
   server = grpc.Server([FLAGS.server_address])
 
@@ -243,7 +250,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
                                    tf.TensorSpec([], tf.int64, 'run_ids'))
   info_specs = (
       tf.TensorSpec([], tf.int64, 'episode_num_frames'),
-      tf.TensorSpec([], tf.float32, 'episode_returns'),
+      tf.TensorSpec([number_of_players], tf.float32, 'episode_returns'),
       tf.TensorSpec([], tf.float32, 'episode_raw_returns'),
   )
   actor_infos = utils.Aggregator(FLAGS.num_actors, info_specs)
@@ -373,10 +380,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       tf.summary.experimental.set_step(num_env_frames)
 
       # Save checkpoint.
-      current_time = time.time()
-      if current_time - last_ckpt_time >= FLAGS.save_checkpoint_secs:
-        manager.save()
-        last_ckpt_time = current_time
+      agent.manage_checkpoints()
 
       def log(num_env_frames):
         """Logs actor summaries."""
@@ -387,12 +391,13 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
         for n, r, s in zip(episode_num_frames, episode_returns,
                            episode_raw_returns):
           logging.info('Return: %f Frames: %i', r, n)
-          tf.summary.scalar('episode_return', r)
+          tf.summary.scalar('episode_return', tf.reduce_sum(r))
           tf.summary.scalar('episode_raw_return', s)
           tf.summary.scalar('num_episode_frames', n)
       log_future.result()  # Raise exception if any occurred in logging.
       log_future = executor.submit(log, num_env_frames)
 
+      current_time = time.time()
       if current_time - last_log_time >= 120:
         df = tf.cast(num_env_frames - last_num_env_frames, tf.float32)
         dt = time.time() - last_log_time
