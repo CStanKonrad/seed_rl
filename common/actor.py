@@ -74,7 +74,7 @@ def actor_loop(create_env_fn):
         while True:
           tf.summary.experimental.set_step(actor_step)
           env_output = utils.EnvOutput(reward, done, observation)
-          logging.info('Getting %s', env_output)
+          #logging.info('Getting %s', env_output)
           with timer_cls('actor/elapsed_inference_s', 1000):
             action = client.inference(
                 (FLAGS.task, run_id, env_output, raw_reward))

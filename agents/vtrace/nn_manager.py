@@ -70,7 +70,7 @@ class NNManager():
         grads = tape.gradient(loss, self._network[i].trainable_variables)
         for t, g in zip(self._temp_grads[i], grads):
           t.assign(g)
-          
+
       del tape
       return loss
 
@@ -79,7 +79,7 @@ class NNManager():
 
     def apply_gradients(_):
       for i in range(self._num_networks):
-        self._optimizer[i].apply_gradients(zip(self._temp_grads[i], self._network[i].trainable_variables))
+        self._optimizers[i].apply_gradients(zip(self._temp_grads[i], self._network[i].trainable_variables))
 
     strategy.experimental_run_v2(apply_gradients, (loss,))
 
