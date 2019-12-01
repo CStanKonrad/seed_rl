@@ -197,11 +197,11 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     final_iteration = int(
         math.ceil(FLAGS.total_environment_frames / iter_frame_ratio))
 
-    agent.create_optimizers(create_agent_fn, final_iteration)
+    agent.create_optimizers(create_optimizer_fn, final_iteration)
     ##optimizer, learning_rate_fn = create_optimizer_fn(final_iteration)
 
 
-    iterations = agent.itetations()
+    iterations = agent.iterations()
     ##iterations = optimizer.iterations
     ##optimizer._create_hypers()
     ##optimizer._create_slots(agent.trainable_variables)

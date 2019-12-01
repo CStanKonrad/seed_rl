@@ -63,13 +63,15 @@ class NNManager():
   def optimize(self, unroll_specs, decode, data, compute_loss, training_strategy, strategy):
     def compute_gradients(args):
       args = tf.nest.pack_sequence_as(unroll_specs, decode(args, data))
-      with tf.GradientTape() as tape:
+      with tf.GradientTape(persistent=True) as tape:
         loss = compute_loss(self, *args)
 
       for i in range(self._num_networks):
         grads = tape.gradient(loss, self._network[i].trainable_variables)
         for t, g in zip(self._temp_grads[i], grads):
           t.assign(g)
+          
+      del tape
       return loss
 
     loss = training_strategy.experimental_run_v2(compute_gradients, (data,))
