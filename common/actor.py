@@ -67,13 +67,14 @@ def actor_loop(create_env_fn):
         # Unique ID to identify a specific run of an actor.
         run_id = np.random.randint(np.iinfo(np.int64).max)
         observation = env.reset()
-        reward = 0.0
+        reward = tf.zeros(env.action_space.nvec.shape[0], dtype=tf.float32)
         raw_reward = 0.0
         done = False
 
         while True:
           tf.summary.experimental.set_step(actor_step)
           env_output = utils.EnvOutput(reward, done, observation)
+          logging.info('Getting %s', env_output)
           with timer_cls('actor/elapsed_inference_s', 1000):
             action = client.inference(
                 (FLAGS.task, run_id, env_output, raw_reward))

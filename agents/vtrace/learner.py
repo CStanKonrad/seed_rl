@@ -196,41 +196,28 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
         FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats)
     final_iteration = int(
         math.ceil(FLAGS.total_environment_frames / iter_frame_ratio))
-    optimizer, learning_rate_fn = create_optimizer_fn(final_iteration)
+
+    agent.create_optimizers(create_agent_fn, final_iteration)
+    ##optimizer, learning_rate_fn = create_optimizer_fn(final_iteration)
 
 
-    iterations = optimizer.iterations
-    optimizer._create_hypers()
-    optimizer._create_slots(agent.trainable_variables)
+    iterations = agent.itetations()
+    ##iterations = optimizer.iterations
+    ##optimizer._create_hypers()
+    ##optimizer._create_slots(agent.trainable_variables)
 
     # ON_READ causes the replicated variable to act as independent variables for
     # each replica.
-    temp_grads = [
-        tf.Variable(tf.zeros_like(v), trainable=False,
-                    synchronization=tf.VariableSynchronization.ON_READ)
-        for v in agent.trainable_variables
-    ]
+    #temp_grads = [
+        #tf.Variable(tf.zeros_like(v), trainable=False,
+                    #synchronization=tf.VariableSynchronization.ON_READ)
+        #for v in agent.trainable_variables
+    #]
 
   @tf.function
   def minimize(iterator):
     data = next(iterator)
-
-    def compute_gradients(args):
-      args = tf.nest.pack_sequence_as(unroll_specs, decode(args, data))
-      with tf.GradientTape() as tape:
-        loss = compute_loss(agent, *args)
-      grads = tape.gradient(loss, agent.trainable_variables)
-      for t, g in zip(temp_grads, grads):
-        t.assign(g)
-      return loss
-
-    loss = training_strategy.experimental_run_v2(compute_gradients, (data,))
-    loss = training_strategy.experimental_local_results(loss)[0]
-
-    def apply_gradients(_):
-      optimizer.apply_gradients(zip(temp_grads, agent.trainable_variables))
-
-    strategy.experimental_run_v2(apply_gradients, (loss,))
+    agent.optimize(unroll_specs, decode, data, compute_loss, training_strategy, strategy)
 
   agent_output_specs = tf.nest.map_structure(
       lambda t: tf.TensorSpec(t.shape[1:], t.dtype), initial_agent_output)
@@ -239,7 +226,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       FLAGS.logdir, flush_millis=20000, max_queue=1000)
 
   # Setup checkpointing and restore checkpoint.
-  agent.make_checkpoints(optimizer)
+  agent.make_checkpoints()
 
   server = grpc.Server([FLAGS.server_address])
 
@@ -402,7 +389,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
         df = tf.cast(num_env_frames - last_num_env_frames, tf.float32)
         dt = time.time() - last_log_time
         tf.summary.scalar('num_environment_frames/sec', df / dt)
-        tf.summary.scalar('learning_rate', learning_rate_fn(iterations))
+        #tf.summary.scalar('learning_rate', learning_rate_fn(iterations))
 
         last_num_env_frames, last_log_time = num_env_frames, time.time()
 
