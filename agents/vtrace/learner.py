@@ -295,12 +295,13 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     prev_agent_states = agent_states.read(actor_ids)
     def make_inference_fn(inference_device):
       def device_specific_inference_fn():
-        with tf.device(inference_device):
-          @tf.function
-          def agent_inference(*args):
-            return agent(*decode(args))
+        ## todo make it work
+        #with tf.device(inference_device):
+          #@tf.function
+        def agent_inference(*args):
+          return agent(*decode(args))
 
-          return agent_inference(input_, prev_agent_states)
+        return agent_inference(input_, prev_agent_states)
 
       return device_specific_inference_fn
 
