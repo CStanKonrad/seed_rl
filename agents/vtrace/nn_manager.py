@@ -16,7 +16,7 @@ def _prefix_permute(tensor, prefix_permutation):
   return tf.transpose(tensor, perm=permutation)
 
 class NNManager():
-  def __init__(self, create_agent_fn, env_output_specs, action_space, logdir, save_checkpoint_secs, config, inference_device):
+  def __init__(self, create_agent_fn, env_output_specs, action_space, logdir, save_checkpoint_secs, config):
     self._num_networks = len(config['networks_actions'])
     self._networks_actions = config['networks_actions']
     self._mapper_function = lambda x: x  #eval(config['mapper_function'])
@@ -27,7 +27,7 @@ class NNManager():
     self._ckpt = None
     self._manager = None
     self._last_ckpt_time = [0] * self._num_networks
-    self._inference_device = inference_device
+    #self._inference_device = inference_device
 
     self.trainable_variables = None
     self._optimizers = None
