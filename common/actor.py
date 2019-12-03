@@ -24,12 +24,13 @@ from seed_rl.common import common_flags
 from seed_rl.common import profiling
 from seed_rl.common import utils
 import tensorflow as tf
+from inspect import signature
 
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('task', 0, 'Task id.')
-flags.DEFINE_integer('num_actors_with_summaries', 4,
+flags.DEFINE_integer('num_actors_with_summaries', 1,
                      'Number of actors that will log debug/profiling TF '
                      'summaries.')
 
@@ -46,12 +47,16 @@ def actor_loop(create_env_fn):
       newly created environment.
   """
   logging.info('Starting actor loop')
+  env_logdir = ''
   if are_summaries_enabled():
+    main_logdir = os.path.join(FLAGS.logdir, 'actor_{}'.format(FLAGS.task))
+    env_logdir = os.path.join(main_logdir, 'env')
     summary_writer = tf.summary.create_file_writer(
-        os.path.join(FLAGS.logdir, 'actor_{}'.format(FLAGS.task)),
+        main_logdir,
         flush_millis=20000, max_queue=1000)
     timer_cls = profiling.ExportingTimer
   else:
+    env_logdir = ''
     summary_writer = tf.summary.create_noop_writer()
     timer_cls = utils.nullcontext
 
@@ -62,7 +67,11 @@ def actor_loop(create_env_fn):
         # Client to communicate with the learner.
         client = grpc.Client(FLAGS.server_address)
 
-        env = create_env_fn(FLAGS.task)
+        create_env_fn_params = signature(create_env_fn).parameters
+        if 'env_logdir' in create_env_fn_params:
+          env = create_env_fn(FLAGS.task, env_logdir=env_logdir)
+        else:
+          env = create_env_fn(FLAGS.task)
 
         # Unique ID to identify a specific run of an actor.
         run_id = np.random.randint(np.iinfo(np.int64).max)
