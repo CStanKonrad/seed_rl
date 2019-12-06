@@ -378,7 +378,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
             info_queue.dequeue_many(info_queue.size()))
         for n, r, s in zip(episode_num_frames, episode_returns,
                            episode_raw_returns):
-          logging.info('Return: %f Frames: %i', r, n)
+          logging.info('Return: %f Frames: %i', tf.reduce_sum(r), n)
           tf.summary.scalar('episode_return', tf.reduce_sum(r))
           tf.summary.scalar('episode_raw_return', s)
           tf.summary.scalar('num_episode_frames', n)
