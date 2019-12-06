@@ -27,9 +27,12 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('env_config', '', 'json with config')
 flags.DEFINE_integer('num_action_repeats', 1, 'Number of action repeats.')
 
-def create_environment(_):
+def create_environment(_, env_logdir=''):
   """Returns a gym Football environment."""
   logging.info('Creating environment: %s', FLAGS.env_config)
   config = json.loads(FLAGS.env_config)
+  if env_logdir != '':
+    logging.info('Environment asked to provide log: %s', env_logdir)
+    config['logdir'] = env_logdir
   return observation.PackedBitsObservation(
     gym.make('gfootball_zpp:gfootball-custom-v1', **config))
