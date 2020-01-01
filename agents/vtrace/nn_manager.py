@@ -3,6 +3,7 @@ import tensorflow as tf
 import time
 from absl import logging
 from seed_rl.common.utils import EnvOutput
+from seed_rl.football import observation as observation_processor
 import collections
 
 
@@ -84,19 +85,19 @@ class NNManager():
     strategy.experimental_run_v2(apply_gradients, (loss,))
 
 
-  def create_variables(self):
-    self.trainable_variables = []
-    for i in range(self._num_networks):
-      for var in self._network[i].trainable_variables:
-        self.trainable_variables.append(var)
-    self.trainable_variables = tuple(self.trainable_variables)
+  #def create_variables(self):
+   # self.trainable_variables = []
+   # for i in range(self._num_networks):
+   #   for var in self._network[i].trainable_variables:
+   #     self.trainable_variables.append(var)
+   # self.trainable_variables = tuple(self.trainable_variables)
 
   def initial_state(self, batch_size):
     return ()
 
   def make_checkpoints(self):
     self._ckpt = [tf.train.Checkpoint(agent=self._network[i], optimizer=self._optimizers[i]) for i in range(self._num_networks)]
-    self._manager = [tf.train.CheckpointManager(self._ckpt[i], self._logdir + f"/cpkt/{i}", max_to_keep=1,
+    self._manager = [tf.train.CheckpointManager(self._ckpt[i], self._logdir + f"/ckpt/{i}", max_to_keep=1,
                                                 keep_checkpoint_every_n_hours=6) for i in range(self._num_networks)]
     for i in range(self._num_networks):
       self._last_ckpt_time[i] = 0  # Force checkpointing of the initial model.
@@ -112,6 +113,11 @@ class NNManager():
         self._manager[i].save()
         self._last_ckpt_time[i] = current_time
 
+  def save_checkpoints(self):
+    current_time = time.time()
+    for i in range(self._num_networks):
+        self._manager[i].save()
+        self._last_ckpt_time[i] = current_time
 
 
   def __call__(self, input_, core_state, unroll=False, inference=False):
@@ -119,18 +125,23 @@ class NNManager():
       # Add time dimension.
       input_ = tf.nest.map_structure(lambda t: tf.expand_dims(t, 0), input_)
 
-    logging.info('Called with input %s', str(input_))
+    #logging.info('Called with input %s', str(input_))
     prev_actions, env_outputs = input_
 
-    logging.info('Called with prev_action before t %s', str(prev_actions))
+    #logging.info('Called with prev_action before t %s', str(prev_actions))
     prev_actions = _prefix_permute(prev_actions, [2, 0, 1])
-    logging.info('Called with prev_action after t %s', str(prev_actions))
+    #logging.info('Called with prev_action after t %s', str(prev_actions))
 
-    logging.info('Called with env_out before t %s', str(env_outputs))
-    permuted_observation = _prefix_permute(env_outputs.observation, [2, 0, 1])
+    #logging.info('Called with env_out before t %s', str(env_outputs))
+    def prepare_observation(observation):
+       return _prefix_permute(observation_processor.unpackbits(observation), [2, 0, 1])
+
+    permuted_observation = tf.xla.experimental.compile(prepare_observation, [env_outputs.observation])[0] if tf.test.is_gpu_available() else prepare_observation(env_outputs.observation)
+
+
     permuted_reward = _prefix_permute(env_outputs.reward, [2, 0, 1])
     done = env_outputs.done
-    logging.info('Called with env_out after t %s', str(permuted_observation))
+    #logging.info('Called with env_out after t %s', str(permuted_observation))
 
     num_players = permuted_observation.shape[0]
 
@@ -138,16 +149,16 @@ class NNManager():
     for i in range(num_players):
       input_.append((prev_actions[i], EnvOutput(permuted_reward[i], done, permuted_observation[i])))
 
-    logging.info('Processed input %s', str(input_))
+    #logging.info('Processed input %s', str(input_))
 
     new_action = []
     policy_logits = []
     baseline = []
     for i in range(num_players):
       net_num = self._mapper_function(i)
-      logging.info('for %d net %d', i, net_num)
+      #logging.info('for %d net %d', i, net_num)
       o, s = self._network[net_num](input_[i], core_state, True)#todo change
-      logging.info('o %s', str(o))
+      #logging.info('o %s', str(o))
       new_action.append(o.action)
       policy_logits.append(o.policy_logits)
       baseline.append(o.baseline)
@@ -164,7 +175,7 @@ class NNManager():
     outputs = AgentOutput(new_action, policy_logits, baseline)
 
 
-    logging.info('Ends with after %s', str(outputs))
+    #logging.info('Ends with after %s', str(outputs))
 
     if not unroll:
       # Remove time dimension.

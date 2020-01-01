@@ -59,7 +59,7 @@ flags.DEFINE_float('max_abs_reward', 1.,
 flags.DEFINE_integer('num_actors', 4, 'Number of actors.')
 
 #Network Manger config
-flags.DEFINE_string('nnm_conf', 'todo', 'Neural Network Manager config')
+flags.DEFINE_string('nnm_network_actions', 'todo', 'Neural Network Manager network action spaces')
 
 
 FLAGS = flags.FLAGS
@@ -85,12 +85,12 @@ def compute_loss(agent, agent_state, prev_actions, env_outputs, agent_outputs):
     rewards = tf.clip_by_value(rewards, -FLAGS.max_abs_reward,
                                FLAGS.max_abs_reward)
   discounts = tf.cast(~done, tf.float32) * FLAGS.discounting
-  logging.info('discounts before %s', str(discounts))
+  #logging.info('discounts before %s', str(discounts))
   discounts = tf.expand_dims(discounts, -1)
   rep_m = [1] * len(discounts.shape)
   rep_m[-1] = learner_outputs.baseline.shape[-1]
   discounts = tf.tile(discounts, rep_m)
-  logging.info('discounts after %s', str(discounts))
+  #logging.info('discounts after %s', str(discounts))
 
   # Compute V-trace returns and weights.
   vtrace_returns = vtrace.from_logits(
@@ -103,7 +103,7 @@ def compute_loss(agent, agent_state, prev_actions, env_outputs, agent_outputs):
       bootstrap_value=bootstrap_value,
       lambda_=FLAGS.lambda_)
 
-  logging.info('vtrace returned %s', str(vtrace_returns))
+  #logging.info('vtrace returned %s', str(vtrace_returns))
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
@@ -190,7 +190,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       return agent(*decode(args))
 
     initial_agent_output, _ = create_variables(input_, initial_agent_state)
-    agent.create_variables()
+    #agent.create_variables()
     # Create optimizer.
     iter_frame_ratio = (
         FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats)
@@ -294,14 +294,16 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     input_ = encode((prev_actions, env_outputs))
     prev_agent_states = agent_states.read(actor_ids)
     def make_inference_fn(inference_device):
+      #tf.compat.v1.OptimizerOptions.global_jit_level = tf.compat.v1.OptimizerOptions.ON_2
       def device_specific_inference_fn():
         ## todo make it work
-        #with tf.device(inference_device):
-          #@tf.function
-        def agent_inference(*args):
-          return agent(*decode(args))
+        with tf.device(inference_device):
+          @tf.function
+          def agent_inference(*args):
+            return agent(*decode(args))
 
-        return agent_inference(input_, prev_agent_states)
+          #return tf.xla.experimental.compile(agent_inference, [input_, prev_agent_states])
+          return agent_inference(input_, prev_agent_states)
 
       return device_specific_inference_fn
 
@@ -378,7 +380,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
             info_queue.dequeue_many(info_queue.size()))
         for n, r, s in zip(episode_num_frames, episode_returns,
                            episode_raw_returns):
-          logging.info('Return: %f Frames: %i', tf.reduce_sum(r), n)
+          #logging.info('Return: %f Frames: %i', tf.reduce_sum(r), n)
           tf.summary.scalar('episode_return', tf.reduce_sum(r))
           tf.summary.scalar('episode_raw_return', s)
           tf.summary.scalar('num_episode_frames', n)
@@ -396,6 +398,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
       minimize(it)
 
-  manager.save()
+  agent.save_checkpoints()
   server.shutdown()
   unroll_queue.close()

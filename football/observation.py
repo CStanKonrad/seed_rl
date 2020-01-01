@@ -58,7 +58,7 @@ def unpackbits(frame):
     frame = tf.reshape(frame, frame.shape[:-2] + \
                              (frame.shape[-2] * frame.shape[-1],))
     return frame
-  if tf.test.is_gpu_available():
-    return tf.xla.experimental.compile(_, [frame])[0]
+  #if tf.test.is_gpu_available():
+    #return tf.xla.experimental.compile(_, [frame])[0]
   return _(frame)
 
