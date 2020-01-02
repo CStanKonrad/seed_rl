@@ -26,6 +26,7 @@ See https://arxiv.org/abs/1802.01561 for the full paper.
 import collections
 
 import tensorflow as tf
+from seed_rl.common.utils import group_reduce_sum
 
 
 VTraceFromLogitsReturns = collections.namedtuple(
@@ -36,7 +37,7 @@ VTraceFromLogitsReturns = collections.namedtuple(
 VTraceReturns = collections.namedtuple('VTraceReturns', 'vs pg_advantages')
 
 
-def log_probs_from_logits_and_actions(policy_logits, actions):
+def log_probs_from_logits_and_actions(policy_logits, actions, grouping=None):
   """Computes action log-probs from policy logits and actions.
 
   In the notation used throughout documentation and comments, T refers to the
@@ -57,28 +58,23 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
   policy_logits = tf.convert_to_tensor(policy_logits, dtype=tf.float32)
   actions = tf.convert_to_tensor(actions, dtype=tf.int32)
 
-  if len(actions.shape) == 2:
-    # discrete action space
-    policy_logits.shape.assert_has_rank(3)
-    actions.shape.assert_has_rank(2)
-    return -tf.nn.sparse_softmax_cross_entropy_with_logits(
-        logits=policy_logits, labels=actions)
-  else:
-    # multidiscrete action space
-    policy_logits = tf.transpose(policy_logits, perm=[2, 0, 1, 3])
-    actions = tf.transpose(actions, perm=[2, 0, 1])
-    results = [tf.nn.sparse_softmax_cross_entropy_with_logits(
+
+  # multidiscrete action space
+  policy_logits = tf.transpose(policy_logits, perm=[2, 0, 1, 3])
+  actions = tf.transpose(actions, perm=[2, 0, 1])
+  results = [tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits=policy_logits[i], labels=actions[i])
         for i in range(actions.shape[0])]
-    results = tf.stack(results)
-    results = tf.transpose(results, perm=[1, 2, 0])
-    return -results
+
+  results = tf.stack(group_reduce_sum(results, grouping))
+  results = tf.transpose(results, perm=[1, 2, 0])
+  return -results
 
 
 def from_logits(
     behaviour_policy_logits, target_policy_logits, actions,
     discounts, rewards, values, bootstrap_value,
-    clip_rho_threshold=1.0, clip_pg_rho_threshold=1.0, lambda_=1.0,
+    clip_rho_threshold=1.0, clip_pg_rho_threshold=1.0, lambda_=1.0, grouping=None,
     name='vtrace_from_logits'):
   r"""V-trace for softmax policies.
 
@@ -157,9 +153,9 @@ def from_logits(
 
   with tf.name_scope(name):
     target_action_log_probs = log_probs_from_logits_and_actions(
-        target_policy_logits, actions)
+        target_policy_logits, actions, grouping)
     behaviour_action_log_probs = log_probs_from_logits_and_actions(
-        behaviour_policy_logits, actions)
+        behaviour_policy_logits, actions, grouping)
     log_rhos = target_action_log_probs - behaviour_action_log_probs
     vtrace_returns = from_importance_weights(
         log_rhos=log_rhos,

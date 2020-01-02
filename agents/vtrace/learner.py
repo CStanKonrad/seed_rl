@@ -101,7 +101,8 @@ def compute_loss(agent, agent_state, prev_actions, env_outputs, agent_outputs):
       rewards=rewards,
       values=learner_outputs.baseline,
       bootstrap_value=bootstrap_value,
-      lambda_=FLAGS.lambda_)
+      lambda_=FLAGS.lambda_,
+      grouping=agent.get_action_groups())
 
   #logging.info('vtrace returned %s', str(vtrace_returns))
 
@@ -109,7 +110,8 @@ def compute_loss(agent, agent_state, prev_actions, env_outputs, agent_outputs):
   # loss and an entropy regularization term.
   total_loss = losses.policy_gradient(learner_outputs.policy_logits,
                                       agent_outputs.action,
-                                      vtrace_returns.pg_advantages)
+                                      vtrace_returns.pg_advantages,
+                                      agent.get_action_groups())
   total_loss += FLAGS.baseline_cost * losses.baseline(vtrace_returns.vs -
                                                       learner_outputs.baseline)
   total_loss += FLAGS.entropy_cost * losses.entropy(
@@ -152,9 +154,9 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   settings = utils.init_learner(FLAGS.num_training_tpus)
   strategy, inference_devices, training_strategy, encode, decode = settings
   env = create_env_fn(0)
-  number_of_players = env.action_space.nvec.shape[0]
+  number_of_observations = env.action_space.nvec.shape[0] # todo change
   env_output_specs = utils.EnvOutput(
-      tf.TensorSpec([number_of_players], tf.float32, 'reward'),
+      tf.TensorSpec([number_of_observations], tf.float32, 'reward'),
       tf.TensorSpec([], tf.bool, 'done'),
       tf.TensorSpec(env.observation_space.shape, env.observation_space.dtype,
                     'observation'),
@@ -174,7 +176,9 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
   # Initialize agent and variables.
   agent = NNManager(create_agent_fn, env_output_specs, action_space, FLAGS.logdir, FLAGS.save_checkpoint_secs, {
-    'networks_actions': action_space.nvec
+    'network_actions_spec': [[19], [19]],
+    'observation_to_network_mapping': [0, 1],
+    'network_learning': [True, True]
   })
 
   initial_agent_state = agent.initial_state(1)
@@ -237,7 +241,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
                                    tf.TensorSpec([], tf.int64, 'run_ids'))
   info_specs = (
       tf.TensorSpec([], tf.int64, 'episode_num_frames'),
-      tf.TensorSpec([number_of_players], tf.float32, 'episode_returns'),
+      tf.TensorSpec([number_of_observations], tf.float32, 'episode_returns'),
       tf.TensorSpec([], tf.float32, 'episode_raw_returns'),
   )
   actor_infos = utils.Aggregator(FLAGS.num_actors, info_specs)

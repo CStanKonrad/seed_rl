@@ -36,6 +36,14 @@ Settings = collections.namedtuple(
     'Settings', 'strategy inference_devices training_strategy encode decode')
 
 
+def group_reduce_sum(tensor_list, grouping):
+  output = []
+  index = 0
+  for g in grouping:
+    output.append(tf.reduce_sum(tensor_list[index:(index + g)], 0))
+    index += g
+  return output
+
 def init_learner(num_training_tpus):
   """Performs common learner initialization."""
   any_tpu = any(

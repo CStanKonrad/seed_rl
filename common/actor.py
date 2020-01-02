@@ -76,7 +76,8 @@ def actor_loop(create_env_fn):
         # Unique ID to identify a specific run of an actor.
         run_id = np.random.randint(np.iinfo(np.int64).max)
         observation = env.reset()
-        reward = tf.zeros(env.action_space.nvec.shape[0], dtype=tf.float32)
+        logging.info('Serving %s observations', str(observation.shape[0]))
+        reward = tf.zeros(observation.shape[0], dtype=tf.float32)
         raw_reward = 0.0
         done = False
 
