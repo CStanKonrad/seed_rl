@@ -20,9 +20,11 @@ import concurrent.futures
 import math
 import time
 import gym
+import json
 
 from absl import flags
 from absl import logging
+
 
 from seed_rl import grpc
 from seed_rl.common import common_flags
@@ -59,7 +61,7 @@ flags.DEFINE_float('max_abs_reward', 1.,
 flags.DEFINE_integer('num_actors', 4, 'Number of actors.')
 
 #Network Manger config
-flags.DEFINE_string('nnm_network_actions', 'todo', 'Neural Network Manager network action spaces')
+flags.DEFINE_string('nnm_config', '{"network_actions_spec": [[19], [19]], "observation_to_network_mapping": [0, 1], "network_learning": [true, true] }', 'Neural Network Manager network action spaces')
 
 
 FLAGS = flags.FLAGS
@@ -154,7 +156,10 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   settings = utils.init_learner(FLAGS.num_training_tpus)
   strategy, inference_devices, training_strategy, encode, decode = settings
   env = create_env_fn(0)
-  number_of_observations = env.action_space.nvec.shape[0] # todo change
+  nnm_config = json.loads(FLAGS.nnm_config)
+  number_of_observations = env.reset().shape[0]
+  assert number_of_observations == len(nnm_config['observation_to_network_mapping'])
+
   env_output_specs = utils.EnvOutput(
       tf.TensorSpec([number_of_observations], tf.float32, 'reward'),
       tf.TensorSpec([], tf.bool, 'done'),
@@ -175,11 +180,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   agent_input_specs = (action_specs, env_output_specs)
 
   # Initialize agent and variables.
-  agent = NNManager(create_agent_fn, env_output_specs, action_space, FLAGS.logdir, FLAGS.save_checkpoint_secs, {
-    'network_actions_spec': [[19], [19]],
-    'observation_to_network_mapping': [0, 1],
-    'network_learning': [True, True]
-  })
+  agent = NNManager(create_agent_fn, env_output_specs, action_space, FLAGS.logdir, FLAGS.save_checkpoint_secs, nnm_config)
 
   initial_agent_state = agent.initial_state(1)
   agent_state_specs = tf.nest.map_structure(
