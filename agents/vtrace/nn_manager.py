@@ -29,15 +29,28 @@ def group_tensors(tensor_list, grouping):
 class NNManager():
   def __init__(self, create_agent_fn, env_output_specs, action_space, logdir, save_checkpoint_secs, config):
     self._observation_to_network_mapping = config['observation_to_network_mapping']
-    self._network_learning = config['network_learning']
     self._network_actions_spec = config['network_actions_spec']
     self._num_networks = len(self._network_actions_spec)
+
+    self._network_learning = config['network_learning']
+    # by default iteration number is picked from  optimizer of the first network
+    # if the first network is not updated then NNManager handles iterations manually
+    self._handle_iterations_manually = not self._network_learning[0]
+    self._iterations = tf.Variable(0, dtype=tf.int64)
+
 
     self._logdir = logdir
     self._save_checkpoint_secs = save_checkpoint_secs
 
+    self._network_config = config['network_config']
+    if (len(self._network_config) == 1) and (self._num_networks != 1):
+      self._network_config = [self._network_config[0]] * self._num_networks
     self._network = [create_agent_fn(env_output_specs, self._network_actions_spec[i]) for i in
                      range(self._num_networks)]
+
+    for i in range(self._num_networks):
+      self._network[i].change_config(self._network_config[i])
+
     self._ckpt = None
     self._manager = None
     self._last_ckpt_time = [0] * self._num_networks
@@ -52,6 +65,7 @@ class NNManager():
     logging.info('NNManager: networks : %s', str(self._network))
     logging.info('NNManager: networks lerning : %s', str(self._network_learning))
     logging.info('NNManager: networks actions specs : %s', str(self._network_actions_spec))
+    logging.info('NNManager: networks configs : %s', str(self._network_config))
 
   def get_action_groups(self):
     groups = []
@@ -77,8 +91,11 @@ class NNManager():
       self._learning_rate_fn.append(learning_rate_fn)
       self._temp_grads.append(temp_grad)
 
+    if not self._handle_iterations_manually:
+      self._iterations = self._optimizers[0].iterations
+
   def iterations(self):
-    return self._optimizers[0].iterations
+    return self._iterations
 
   def optimize(self, unroll_specs, decode, data, compute_loss, training_strategy, strategy):
     def compute_gradients(args):
@@ -87,9 +104,10 @@ class NNManager():
         loss = compute_loss(self, *args)
 
       for i in range(self._num_networks):
-        grads = tape.gradient(loss, self._network[i].trainable_variables)
-        for t, g in zip(self._temp_grads[i], grads):
-          t.assign(g)
+        if self._network_learning[i]:
+          grads = tape.gradient(loss, self._network[i].trainable_variables)
+          for t, g in zip(self._temp_grads[i], grads):
+            t.assign(g)
 
       del tape
       return loss
@@ -99,9 +117,14 @@ class NNManager():
 
     def apply_gradients(_):
       for i in range(self._num_networks):
-        self._optimizers[i].apply_gradients(zip(self._temp_grads[i], self._network[i].trainable_variables))
+        if self._network_learning[i]:
+          self._optimizers[i].apply_gradients(zip(self._temp_grads[i], self._network[i].trainable_variables))
 
     strategy.experimental_run_v2(apply_gradients, (loss,))
+
+    logging.info('Data %s', str(data))
+    if self._handle_iterations_manually:
+      self._iterations.assign(self._iterations + 1)
 
   # def create_variables(self):
   # self.trainable_variables = []
@@ -128,17 +151,18 @@ class NNManager():
   def manage_checkpoints(self):
     current_time = time.time()
     for i in range(self._num_networks):
-      if current_time - self._last_ckpt_time[i] >= self._save_checkpoint_secs:
+      if (self._network_learning[i]) and (current_time - self._last_ckpt_time[i] >= self._save_checkpoint_secs):
         self._manager[i].save()
         self._last_ckpt_time[i] = current_time
 
   def save_checkpoints(self):
     current_time = time.time()
     for i in range(self._num_networks):
-      self._manager[i].save()
-      self._last_ckpt_time[i] = current_time
+      if self._network_learning[i]:
+        self._manager[i].save()
+        self._last_ckpt_time[i] = current_time
 
-  def __call__(self, input_, core_state, unroll=False, inference=False):
+  def __call__(self, input_, core_state, unroll=False):
     if not unroll:
       # Add time dimension.
       input_ = tf.nest.map_structure(lambda t: tf.expand_dims(t, 0), input_)

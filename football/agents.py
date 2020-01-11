@@ -15,11 +15,8 @@
 """SEED agent using Keras."""
 
 import collections
-from seed_rl.common import utils
-from seed_rl.football import observation
 import tensorflow as tf
-
-import gym
+from seed_rl.common import utils
 
 AgentOutput = collections.namedtuple('AgentOutput',
                                      'action policy_logits baseline')
@@ -78,12 +75,19 @@ def apply_net(action_specs, policy_logits, core_output):
   return arr
 
 
-def sample_action(action_specs, policy_logits):
+def choose_action(action_specs, policy_logits, sample=True):
   n_actions = len(action_specs)
   policy_logits = tf.transpose(policy_logits, perm=[1, 0, 2])
-  new_action = tf.stack([tf.squeeze(
-    tf.random.categorical(
-      policy_logits[i], 1, dtype=tf.int32), 1) for i in range(n_actions)])
+
+  if not sample:
+    new_action = tf.stack([
+      tf.math.argmax(
+        policy_logits[i], -1, output_type=tf.int32) for i in range(n_actions)])
+  else:
+    new_action = tf.stack([tf.squeeze(
+      tf.random.categorical(
+        policy_logits[i], 1, dtype=tf.int32), 1) for i in range(n_actions)])
+
   new_action = tf.transpose(new_action, perm=[1, 0])
   return new_action
 
@@ -96,6 +100,8 @@ class GFootball(tf.Module):
 
   def __init__(self, action_specs):
     super(GFootball, self).__init__(name='gfootball')
+
+    self._config = {'sample_actions': True}
 
     # Parameters and layers for unroll.
 
@@ -124,6 +130,9 @@ class GFootball(tf.Module):
   def initial_state(self, batch_size):
     return ()
 
+  def change_config(self, new_config):
+    self._config = new_config
+
   def _torso(self, unused_prev_action, env_output):
     _, _, frame = env_output
 
@@ -149,7 +158,7 @@ class GFootball(tf.Module):
     baseline = tf.squeeze(self._baseline(core_output), axis=-1)
 
     # Sample an action from the policy.
-    new_action = sample_action(self._action_specs, policy_logits)
+    new_action = choose_action(self._action_specs, policy_logits, self._config['sample_actions'])
 
     return AgentOutput(new_action, policy_logits, baseline)
 
