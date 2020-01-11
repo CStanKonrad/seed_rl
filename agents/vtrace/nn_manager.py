@@ -6,15 +6,16 @@ from seed_rl.common.utils import EnvOutput
 from seed_rl.football import observation as observation_processor
 import collections
 
-
 AgentOutput = collections.namedtuple('AgentOutput',
                                      'action policy_logits baseline')
+
 
 def _prefix_permute(tensor, prefix_permutation):
   permutation = list(range(len(tensor.shape)))
   prefix_len = len(prefix_permutation)
   permutation[0:prefix_len] = prefix_permutation
   return tf.transpose(tensor, perm=permutation)
+
 
 def group_tensors(tensor_list, grouping):
   output = []
@@ -35,11 +36,12 @@ class NNManager():
     self._logdir = logdir
     self._save_checkpoint_secs = save_checkpoint_secs
 
-    self._network = [create_agent_fn(env_output_specs, self._network_actions_spec[i]) for i in range(self._num_networks)]
+    self._network = [create_agent_fn(env_output_specs, self._network_actions_spec[i]) for i in
+                     range(self._num_networks)]
     self._ckpt = None
     self._manager = None
     self._last_ckpt_time = [0] * self._num_networks
-    #self._inference_device = inference_device
+    # self._inference_device = inference_device
 
     self.trainable_variables = None
     self._optimizers = None
@@ -56,7 +58,6 @@ class NNManager():
     for i in self._observation_to_network_mapping:
       groups.append(len(self._network_actions_spec[i]))
     return groups
-
 
   def create_optimizers(self, create_optimizer_fn, final_iteration):
     self._optimizers = []
@@ -102,26 +103,26 @@ class NNManager():
 
     strategy.experimental_run_v2(apply_gradients, (loss,))
 
-
-  #def create_variables(self):
-   # self.trainable_variables = []
-   # for i in range(self._num_networks):
-   #   for var in self._network[i].trainable_variables:
-   #     self.trainable_variables.append(var)
-   # self.trainable_variables = tuple(self.trainable_variables)
+  # def create_variables(self):
+  # self.trainable_variables = []
+  # for i in range(self._num_networks):
+  #   for var in self._network[i].trainable_variables:
+  #     self.trainable_variables.append(var)
+  # self.trainable_variables = tuple(self.trainable_variables)
 
   def initial_state(self, batch_size):
     return ()
 
   def make_checkpoints(self):
-    self._ckpt = [tf.train.Checkpoint(agent=self._network[i], optimizer=self._optimizers[i]) for i in range(self._num_networks)]
+    self._ckpt = [tf.train.Checkpoint(agent=self._network[i], optimizer=self._optimizers[i]) for i in
+                  range(self._num_networks)]
     self._manager = [tf.train.CheckpointManager(self._ckpt[i], self._logdir + f"/ckpt/{i}", max_to_keep=1,
                                                 keep_checkpoint_every_n_hours=6) for i in range(self._num_networks)]
     for i in range(self._num_networks):
       self._last_ckpt_time[i] = 0  # Force checkpointing of the initial model.
       if self._manager[i].latest_checkpoint:
         logging.info('Restoring checkpoint: %s', self._manager[i].latest_checkpoint)
-        self._ckpt[i].restore(self._manager[i].latest_checkpoint) #.assert_consumed()
+        self._ckpt[i].restore(self._manager[i].latest_checkpoint)  # .assert_consumed()
         self._last_ckpt_time[i] = time.time()
 
   def manage_checkpoints(self):
@@ -134,9 +135,8 @@ class NNManager():
   def save_checkpoints(self):
     current_time = time.time()
     for i in range(self._num_networks):
-        self._manager[i].save()
-        self._last_ckpt_time[i] = current_time
-
+      self._manager[i].save()
+      self._last_ckpt_time[i] = current_time
 
   def __call__(self, input_, core_state, unroll=False, inference=False):
     if not unroll:
@@ -152,16 +152,16 @@ class NNManager():
     prev_actions = tf.nest.map_structure(lambda t: tf.transpose(t, perm=[1, 2, 0]), prev_actions)
     logging.info('Called with prev_action after t %s', str(prev_actions))
 
-    #logging.info('Called with env_out before t %s', str(env_outputs))
+    # logging.info('Called with env_out before t %s', str(env_outputs))
     def prepare_observation(observation):
-       return _prefix_permute(observation_processor.unpackbits(observation), [2, 0, 1])
+      return _prefix_permute(observation_processor.unpackbits(observation), [2, 0, 1])
 
-    permuted_observation = tf.xla.experimental.compile(prepare_observation, [env_outputs.observation])[0] if tf.test.is_gpu_available() else prepare_observation(env_outputs.observation)
-
+    permuted_observation = tf.xla.experimental.compile(prepare_observation, [env_outputs.observation])[
+      0] if tf.test.is_gpu_available() else prepare_observation(env_outputs.observation)
 
     permuted_reward = _prefix_permute(env_outputs.reward, [2, 0, 1])
     done = env_outputs.done
-    #logging.info('Called with env_out after t %s', str(permuted_observation))
+    # logging.info('Called with env_out after t %s', str(permuted_observation))
 
     num_observations = permuted_observation.shape[0]
     assert num_observations == len(self._observation_to_network_mapping)
@@ -178,7 +178,7 @@ class NNManager():
     for i in range(num_observations):
       net_num = self._observation_to_network_mapping[i]
       logging.info('for %d net %d', i, net_num)
-      o, s = self._network[net_num](input_[i], core_state)#todo change
+      o, s = self._network[net_num](input_[i], core_state)  # todo change
       logging.info('o %s', str(o))
       new_action.append(_prefix_permute(o.action, [2, 0, 1]))
       policy_logits.append(_prefix_permute(o.policy_logits, [2, 0, 1]))
@@ -195,9 +195,7 @@ class NNManager():
     policy_logits = _prefix_permute(policy_logits, [1, 2, 0])
     baseline = _prefix_permute(baseline, [1, 2, 0])
 
-
     outputs = AgentOutput(new_action, policy_logits, baseline)
-
 
     logging.info('Ends with after %s', str(outputs))
 
