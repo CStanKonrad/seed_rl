@@ -39,20 +39,6 @@ def are_summaries_enabled():
   return FLAGS.task < FLAGS.num_actors_with_summaries
 
 
-def convert_reward(reward):
-  if not hasattr(reward, "__getitem__"):
-    reward = [reward]
-  return tf.Variable(reward, dtype=tf.float32)
-
-
-def get_initial_reward(env):
-  env.reset()
-  observation, reward, done, info = env.step(env.action_space.sample())
-  env.reset()
-  reward = convert_reward(reward) * 0.0
-  return reward
-
-
 def actor_loop(create_env_fn):
   """Main actor loop.
 
@@ -90,7 +76,7 @@ def actor_loop(create_env_fn):
         # Unique ID to identify a specific run of an actor.
         run_id = np.random.randint(np.iinfo(np.int64).max)
         observation = env.reset()
-        zero_reward = get_initial_reward(env)
+        zero_reward = utils.get_initial_reward(env)
         reward = tf.identity(zero_reward)
         raw_reward = 0.0
         done = False
@@ -108,7 +94,7 @@ def actor_loop(create_env_fn):
           with timer_cls('actor/elapsed_env_step_s', 1000):
             observation, reward, done, info = env.step(action.numpy())
           episode_step += 1
-          reward = convert_reward(reward)
+          reward = utils.convert_reward(reward)
           episode_return += reward
           raw_reward = float((info or {}).get('score_reward', reward))
           episode_raw_return += raw_reward

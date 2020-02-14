@@ -36,6 +36,19 @@ Settings = collections.namedtuple(
     'Settings', 'strategy inference_devices training_strategy encode decode')
 
 
+def convert_reward(reward):
+  if not hasattr(reward, "__getitem__"):
+    reward = [reward]
+  return tf.Variable(reward, dtype=tf.float32)
+
+
+def get_initial_reward(env):
+  env.reset()
+  observation, reward, done, info = env.step(env.action_space.sample())
+  env.reset()
+  reward = convert_reward(reward) * 0.0
+  return reward
+
 def init_learner(num_training_tpus):
   """Performs common learner initialization."""
   if tf.config.experimental.list_logical_devices('TPU'):
