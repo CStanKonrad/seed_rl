@@ -25,17 +25,32 @@ from seed_rl.common import profiling
 from seed_rl.common import utils
 import tensorflow as tf
 
+from inspect import signature
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('task', 0, 'Task id.')
-flags.DEFINE_integer('num_actors_with_summaries', 4,
+flags.DEFINE_integer('num_actors_with_summaries', 1,
                      'Number of actors that will log debug/profiling TF '
                      'summaries.')
 
 
 def are_summaries_enabled():
   return FLAGS.task < FLAGS.num_actors_with_summaries
+
+
+def convert_reward(reward):
+  if not hasattr(reward, "__getitem__"):
+    reward = [reward]
+  return tf.Variable(reward, dtype=tf.float32)
+
+
+def get_initial_reward(env):
+  env.reset()
+  observation, reward, done, info = env.step(env.action_space.sample())
+  env.reset()
+  reward = convert_reward(reward) * 0.0
+  return reward
 
 
 def actor_loop(create_env_fn):
@@ -47,11 +62,14 @@ def actor_loop(create_env_fn):
   """
   logging.info('Starting actor loop')
   if are_summaries_enabled():
+    main_logdir = os.path.join(FLAGS.logdir, 'actor_{}'.format(FLAGS.task))
+    env_logdir = os.path.join(main_logdir, 'env')
     summary_writer = tf.summary.create_file_writer(
-        os.path.join(FLAGS.logdir, 'actor_{}'.format(FLAGS.task)),
+        main_logdir,
         flush_millis=20000, max_queue=1000)
     timer_cls = profiling.ExportingTimer
   else:
+    env_logdir = ''
     summary_writer = tf.summary.create_noop_writer()
     timer_cls = utils.nullcontext
 
@@ -62,17 +80,23 @@ def actor_loop(create_env_fn):
         # Client to communicate with the learner.
         client = grpc.Client(FLAGS.server_address)
 
-        env = create_env_fn(FLAGS.task)
+        # Checks whenever env can provide additional logs
+        create_env_fn_params = signature(create_env_fn).parameters
+        if 'env_logdir' in create_env_fn_params:
+          env = create_env_fn(FLAGS.task, env_logdir=env_logdir)
+        else:
+          env = create_env_fn(FLAGS.task)
 
         # Unique ID to identify a specific run of an actor.
         run_id = np.random.randint(np.iinfo(np.int64).max)
         observation = env.reset()
-        reward = 0.0
+        zero_reward = get_initial_reward(env)
+        reward = tf.identity(zero_reward)
         raw_reward = 0.0
         done = False
 
         episode_step = 0
-        episode_return = 0
+        episode_return = tf.identity(zero_reward)
         episode_raw_return = 0
 
         while True:
@@ -84,16 +108,17 @@ def actor_loop(create_env_fn):
           with timer_cls('actor/elapsed_env_step_s', 1000):
             observation, reward, done, info = env.step(action.numpy())
           episode_step += 1
+          reward = convert_reward(reward)
           episode_return += reward
           raw_reward = float((info or {}).get('score_reward', reward))
           episode_raw_return += raw_reward
           if done:
-            logging.info('Return: %f Raw return: %f Steps: %i', episode_return,
+            logging.info('Return: %s Raw return: %f Steps: %i', episode_return.numpy(),
                          episode_raw_return, episode_step)
             with timer_cls('actor/elapsed_env_reset_s', 10):
               observation = env.reset()
               episode_step = 0
-              episode_return = 0
+              episode_return = tf.identity(zero_reward)
               episode_raw_return = 0
           actor_step += 1
       except (tf.errors.UnavailableError, tf.errors.CancelledError) as e:
