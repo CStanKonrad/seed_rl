@@ -20,30 +20,20 @@ from absl import logging
 import gym
 from seed_rl.football import observation
 
+import json
+
 FLAGS = flags.FLAGS
 
 # Environment settings.
-flags.DEFINE_string('game', '11_vs_11_easy_stochastic', 'Game/scenario name.')
-flags.DEFINE_enum('reward_experiment', 'scoring',
-                  ['scoring', 'scoring,checkpoints'],
-                  'Reward to be used for training.')
-flags.DEFINE_enum('smm_size', 'default', ['default', 'medium', 'large'],
-                  'Size of the Super Mini Map.')
-flags.DEFINE_integer('num_action_repeats', 1, 'Number of action repeats.')
+flags.DEFINE_string('env_config', '', 'json with env config')
 
 
-def create_environment(_):
+def create_environment(_, env_logdir=''):
   """Returns a gym Football environment."""
-  logging.info('Creating environment: %s', FLAGS.game)
-  assert FLAGS.num_action_repeats == 1, 'Only action repeat of 1 is supported.'
-  channel_dimensions = {
-      'default': (96, 72),
-      'medium': (120, 90),
-      'large': (144, 108),
-  }[FLAGS.smm_size]
-  env = gym.make(
-      'gfootball:GFootball-%s-SMM-v0' % FLAGS.game,
-      stacked=True,
-      rewards=FLAGS.reward_experiment,
-      channel_dimensions=channel_dimensions)
-  return observation.PackedBitsObservation(env)
+  logging.info('Creating environment: %s', FLAGS.env_config)
+  config = json.loads(FLAGS.env_config)
+  if env_logdir != '':
+    logging.info('Environment asked to provide logs to: %s', env_logdir)
+    config['logdir'] = env_logdir
+  return observation.PackedBitsObservation(
+    gym.make('gfootball_zpp:gfootball-custom-v1', **config))
