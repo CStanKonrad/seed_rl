@@ -49,6 +49,25 @@ def get_initial_reward(env):
   reward = convert_reward(reward) * 0.0
   return reward
 
+
+def get_env_output_specs(env):
+  sample_reward = get_initial_reward(env)
+  return EnvOutput(
+    tf.TensorSpec(sample_reward.shape, sample_reward.dtype, 'reward'),
+    tf.TensorSpec([], tf.bool, 'done'),
+    tf.TensorSpec(env.observation_space.shape, env.observation_space.dtype,
+                  'observation'),
+  )
+
+def get_info_specs(env_output_specs):
+  return  (
+    tf.TensorSpec([], tf.int64, 'episode_num_frames'),
+    tf.TensorSpec(env_output_specs.reward.shape,
+                  env_output_specs.reward.dtype, 'episode_returns'),
+    tf.TensorSpec([], tf.float32, 'episode_raw_returns'),
+  )
+
+
 def init_learner(num_training_tpus):
   """Performs common learner initialization."""
   if tf.config.experimental.list_logical_devices('TPU'):

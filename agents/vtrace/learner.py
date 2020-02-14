@@ -196,12 +196,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   env = create_env_fn(0)
   parametric_action_distribution = get_parametric_distribution_for_action_space(
       env.action_space)
-  env_output_specs = utils.EnvOutput(
-      tf.TensorSpec([], tf.float32, 'reward'),
-      tf.TensorSpec([], tf.bool, 'done'),
-      tf.TensorSpec(env.observation_space.shape, env.observation_space.dtype,
-                    'observation'),
-  )
+  env_output_specs = utils.get_env_output_specs(env)
   action_specs = tf.TensorSpec(env.action_space.shape,
                                env.action_space.dtype, 'action')
   agent_input_specs = (action_specs, env_output_specs)
@@ -293,11 +288,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       (action_specs, env_output_specs, agent_output_specs))
   actor_run_ids = utils.Aggregator(FLAGS.num_actors,
                                    tf.TensorSpec([], tf.int64, 'run_ids'))
-  info_specs = (
-      tf.TensorSpec([], tf.int64, 'episode_num_frames'),
-      tf.TensorSpec([], tf.float32, 'episode_returns'),
-      tf.TensorSpec([], tf.float32, 'episode_raw_returns'),
-  )
+  info_specs = utils.get_info_specs(env_output_specs)
   actor_infos = utils.Aggregator(FLAGS.num_actors, info_specs)
 
   # First agent state in an unroll.
@@ -468,7 +459,8 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
               tf.summary.scalar(key, tf.reduce_mean(value))
 
           for (frames, ep_return, raw_return) in zip(*episode_stats):
-            logging.info('Return: %f Raw return: %f Frames: %i', ep_return,
+            logging.info('Return: %s Raw return: %f Frames: %i',
+                         str(ep_return.numpy),
                          raw_return, frames)
 
       logs = minimize(it)
