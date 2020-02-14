@@ -37,8 +37,6 @@ Settings = collections.namedtuple(
 
 
 def convert_reward(reward):
-  if not hasattr(reward, "__getitem__"):
-    reward = [reward]
   return tf.Variable(reward, dtype=tf.float32)
 
 
