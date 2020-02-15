@@ -30,3 +30,7 @@ flags.DEFINE_enum(
     'and sends to the learner each env observation and receives the action to '
     'play. A learner performs policy inference for batches of observations '
     'coming from multiple actors, and use the generated trajectories to learn.')
+
+flags.DEFINE_string('nnm_config',
+                    '{"network_actions_spec": [[0, 4], [4, 8]], "observation_to_network_mapping": [0, 1], "network_learning": [true, true], "network_config": [{"sample_actions": true}]}',
+                    'Neural Network Manager config')

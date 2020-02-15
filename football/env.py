@@ -24,8 +24,12 @@ import json
 
 FLAGS = flags.FLAGS
 
+
 # Environment settings.
-flags.DEFINE_string('env_config', '', 'json with env config')
+flags.DEFINE_string('env_config',
+                    '',
+                    'json with env config')
+flags.DEFINE_integer('num_action_repeats', 1, 'Number of action repeats.')
 
 
 def create_environment(_, env_logdir=''):

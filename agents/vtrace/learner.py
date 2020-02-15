@@ -31,6 +31,8 @@ from seed_rl.common import utils
 from seed_rl.common import vtrace
 from seed_rl.common.parametric_distribution import get_parametric_distribution_for_action_space
 
+from seed_rl.agents.nn_manager.nn_manager import NNManager
+
 import tensorflow as tf
 
 
@@ -95,6 +97,7 @@ def compute_loss(parametric_action_distribution, agent, agent_state,
     rewards = tf.clip_by_value(rewards, -FLAGS.max_abs_reward,
                                FLAGS.max_abs_reward)
   discounts = tf.cast(~done, tf.float32) * FLAGS.discounting
+  discounts = agent.adjust_discounts(discounts)
 
   target_action_log_probs = parametric_action_distribution.log_prob(
       learner_outputs.policy_logits, agent_outputs.action)
@@ -194,16 +197,15 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   settings = utils.init_learner(FLAGS.num_training_tpus)
   strategy, inference_devices, training_strategy, encode, decode = settings
   env = create_env_fn(0)
-  parametric_action_distribution = get_parametric_distribution_for_action_space(
-      env.action_space)
   env_output_specs = utils.get_env_output_specs(env)
   action_specs = tf.TensorSpec(env.action_space.shape,
                                env.action_space.dtype, 'action')
   agent_input_specs = (action_specs, env_output_specs)
 
   # Initialize agent and variables.
-  agent = create_agent_fn(env.action_space, env.observation_space,
-                          parametric_action_distribution)
+  agent = NNManager(create_agent_fn, env_output_specs, env.action_space, FLAGS.logdir, FLAGS.save_checkpoint_secs, FLAGS.nnm_config)
+  parametric_action_distribution = agent.get_action_space_distribution()
+
   initial_agent_state = agent.initial_state(1)
   agent_state_specs = tf.nest.map_structure(
       lambda t: tf.TensorSpec(t.shape[1:], t.dtype), initial_agent_state)
@@ -222,12 +224,11 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
         FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats)
     final_iteration = int(
         math.ceil(FLAGS.total_environment_frames / iter_frame_ratio))
-    optimizer, learning_rate_fn = create_optimizer_fn(final_iteration)
 
+    agent.create_trainable_variables()
+    agent.create_optimizers(create_optimizer_fn, final_iteration)
 
-    iterations = optimizer.iterations
-    optimizer._create_hypers()  
-    optimizer._create_slots(agent.trainable_variables)  
+    iterations = agent.iterations()
 
     # ON_READ causes the replicated variable to act as independent variables for
     # each replica.
@@ -256,9 +257,10 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     logs = training_strategy.experimental_local_results(logs)
 
     def apply_gradients(_):
-      optimizer.apply_gradients(zip(temp_grads, agent.trainable_variables))
+      agent.optimize(temp_grads)
 
     strategy.experimental_run_v2(apply_gradients, (loss,))
+    agent.post_optimize()
 
     return logs
 
@@ -269,17 +271,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       FLAGS.logdir, flush_millis=20000, max_queue=1000)
 
   # Setup checkpointing and restore checkpoint.
-  ckpt = tf.train.Checkpoint(agent=agent, optimizer=optimizer)
-  if FLAGS.init_checkpoint is not None:
-    tf.print('Loading initial checkpoint from %s...' % FLAGS.init_checkpoint)
-    ckpt.restore(FLAGS.init_checkpoint).assert_consumed()
-  manager = tf.train.CheckpointManager(
-      ckpt, FLAGS.logdir, max_to_keep=1, keep_checkpoint_every_n_hours=6)
-  last_ckpt_time = 0  # Force checkpointing of the initial model.
-  if manager.latest_checkpoint:
-    logging.info('Restoring checkpoint: %s', manager.latest_checkpoint)
-    ckpt.restore(manager.latest_checkpoint).assert_consumed()
-    last_ckpt_time = time.time()
+  agent.make_checkpoints()
 
   server = grpc.Server([FLAGS.server_address])
 
@@ -417,13 +409,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       tf.summary.experimental.set_step(num_env_frames)
 
       # Save checkpoint.
-      current_time = time.time()
-      if current_time - last_ckpt_time >= FLAGS.save_checkpoint_secs:
-        manager.save()
-        # Apart from checkpointing, we also save the full model (including
-        # the graph). This way we can load it after the code/parameters changed.
-        tf.saved_model.save(agent, os.path.join(FLAGS.logdir, 'saved_model'))
-        last_ckpt_time = current_time
+      agent.manage_checkpoints()
 
       def log(iterations, num_env_frames):
         """Logs batch and episodes summaries."""
@@ -436,7 +422,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
           for key, values in copy.deepcopy(values_to_log).items():
             tf.summary.scalar(key, tf.reduce_mean(values))
           values_to_log.clear()
-          tf.summary.scalar('learning_rate', learning_rate_fn(iterations))
+          #tf.summary.scalar('learning_rate', learning_rate_fn(iterations))
 
         # log the number of frames per second
         dt = time.time() - last_log_time
@@ -475,7 +461,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       log_future.result()  # Raise exception if any occurred in logging.
       log_future = executor.submit(log, iterations, num_env_frames)
 
-  manager.save()
-  tf.saved_model.save(agent, os.path.join(FLAGS.logdir, 'saved_model'))
+  agent.save_checkpoints()
   server.shutdown()
   unroll_queue.close()

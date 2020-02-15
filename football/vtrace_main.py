@@ -35,7 +35,7 @@ flags.DEFINE_float('learning_rate', 0.00048, 'Learning rate.')
 
 def create_agent(action_space, unused_env_observation_space,
                  unused_parametric_action_distribution):
-  return networks.GFootball(action_space.n)
+  return networks.GFootball(action_space.nvec)
 
 
 def create_optimizer(unused_final_iteration):

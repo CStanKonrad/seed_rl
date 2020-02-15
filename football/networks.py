@@ -15,9 +15,10 @@
 """SEED agent using Keras."""
 
 import collections
-from seed_rl.common import utils
 from seed_rl.football import observation
 import tensorflow as tf
+from seed_rl.common import utils
+import numpy as np
 
 
 AgentOutput = collections.namedtuple('AgentOutput',
@@ -28,7 +29,7 @@ class _Stack(tf.Module):
   """Stack of pooling and convolutional blocks with residual connections."""
 
   def __init__(self, num_ch, num_blocks):
-    
+
     super(_Stack, self).__init__(name='stack')
     self._conv = tf.keras.layers.Conv2D(num_ch, 3, strides=1, padding='same',
                                         kernel_initializer='lecun_normal')
@@ -65,17 +66,58 @@ class _Stack(tf.Module):
     return conv_out
 
 
+def make_logits(layer_fn, action_specs):
+  return [layer_fn(n, 'policy_logits') for n in action_specs]
+
+
+def apply_net(action_specs, policy_logits, core_output):
+  n_actions = len(action_specs)
+  arr = [policy_logits[i](core_output) for i in range(n_actions)]
+  arr = tf.stack(arr)
+  arr = tf.transpose(arr, perm=[1, 0, 2])
+  return arr
+
+
+def post_process_logits(action_specs, policy_logits):
+  all_logits = np.sum(action_specs)
+  new_shape = policy_logits.shape[:-2] + [all_logits]
+  return tf.reshape(policy_logits, new_shape)
+
+
+def choose_action(action_specs, policy_logits, sample=True):
+  n_actions = len(action_specs)
+  policy_logits = tf.transpose(policy_logits, perm=[1, 0, 2])
+
+  if not sample:
+    new_action = tf.stack([
+      tf.math.argmax(
+        policy_logits[i], -1, output_type=tf.int64) for i in range(n_actions)])
+  else:
+    new_action = tf.stack([tf.squeeze(
+      tf.random.categorical(
+        policy_logits[i], 1, dtype=tf.int64), 1) for i in range(n_actions)])
+
+  new_action = tf.transpose(new_action, perm=[1, 0])
+  return new_action
+
+
+
+
 class GFootball(tf.Module):
   """Agent with ResNet, but without LSTM and additional inputs.
 
   Four blocks instead of three in ImpalaAtariDeep.
   """
 
-  def __init__(self, num_actions):
+  def __init__(self, action_specs):
     super(GFootball, self).__init__(name='gfootball')
 
+    self._config = {'sample_actions': True}
+
     # Parameters and layers for unroll.
-    self._num_actions = num_actions
+
+
+    self._action_specs = action_specs
 
     # Parameters and layers for _torso.
     self._stacks = [
@@ -86,16 +128,21 @@ class GFootball(tf.Module):
         256, kernel_initializer='lecun_normal')
 
     # Layers for _head.
-    self._policy_logits = tf.keras.layers.Dense(
-        self._num_actions,
-        name='policy_logits',
-        kernel_initializer='lecun_normal')
+    self._policy_logits = make_logits(
+          lambda num_units, name: tf.keras.layers.Dense(
+            num_units,
+            name=name,
+            kernel_initializer='lecun_normal'),
+          self._action_specs)
+
     self._baseline = tf.keras.layers.Dense(
         1, name='baseline', kernel_initializer='lecun_normal')
 
-  @tf.function
   def initial_state(self, batch_size):
     return ()
+
+  def change_config(self, new_config):
+    self._config = new_config
 
   def _torso(self, unused_prev_action, env_output):
     _, _, frame = env_output
@@ -114,27 +161,21 @@ class GFootball(tf.Module):
     return tf.nn.relu(conv_out)
 
   def _head(self, core_output):
-    policy_logits = self._policy_logits(core_output)
+
+    policy_logits = apply_net(
+          self._action_specs,
+          self._policy_logits,
+          core_output)
     baseline = tf.squeeze(self._baseline(core_output), axis=-1)
 
     # Sample an action from the policy.
-    new_action = tf.random.categorical(policy_logits, 1, dtype=tf.int64)
-    new_action = tf.squeeze(new_action, 1, name='action')
+    new_action = choose_action(self._action_specs, policy_logits, self._config['sample_actions'])
 
-    return AgentOutput(new_action, policy_logits, baseline)
+    return AgentOutput(new_action, post_process_logits(self._action_specs, policy_logits), baseline)
 
-  @tf.function
-  def __call__(self, input_, core_state, unroll=False,
-               is_training=False):
-    if not unroll:
-      # Add time dimension.
-      input_ = tf.nest.map_structure(lambda t: tf.expand_dims(t, 0), input_)
+  def __call__(self, input_, core_state, unroll, is_training):
     prev_actions, env_outputs = input_
     outputs, core_state = self._unroll(prev_actions, env_outputs, core_state)
-    if not unroll:
-      # Remove time dimension.
-      outputs = tf.nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
-
     return outputs, core_state
 
   def _unroll(self, prev_actions, env_outputs, core_state):
