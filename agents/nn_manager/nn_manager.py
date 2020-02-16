@@ -108,7 +108,8 @@ def decode_string_config(config):
       return json.loads(config)
 
 class NNManager():
-  def __init__(self, create_agent_fn, env_output_specs, action_space, logdir, save_checkpoint_secs, config):
+  def __init__(self, create_agent_fn, env_output_specs, action_space, logdir, save_checkpoint_secs, config,
+               observation_space=()):
     config = decode_string_config(config)
 
     self._original_action_space = action_space
@@ -132,7 +133,7 @@ class NNManager():
       self._network_config = [self._network_config[0]] * self._num_networks
 
     self._network = [create_agent_fn(self._network_action_space[i], (), self._network_action_distribution[i]) for i in
-                     range(self._num_networks)] # todo passes () as observation_space
+                     range(self._num_networks)] # todo change () to proper observation_space priority: low
 
     for i in range(self._num_networks):
       if hasattr(self._network[i], 'change_config'):
@@ -251,7 +252,6 @@ class NNManager():
         self._save_checkpoints_for(i)
 
   def save_checkpoints(self):
-    current_time = time.time()
     for i in range(self._num_networks):
       if self._network_learning[i]:
         self._save_checkpoints_for(i)
@@ -301,7 +301,7 @@ class NNManager():
 
       input_ = []
       for i in range(num_observations):
-        input_.append((prev_actions[i], EnvOutput(permuted_reward[i], done, permuted_observation[i]))) # todo think deepcopy done?
+        input_.append((prev_actions[i], EnvOutput(permuted_reward[i], done, permuted_observation[i])))
 
       logging.info('Processed input %s', str(input_))
 
