@@ -239,8 +239,11 @@ class NNManager():
     if self._handle_iterations_manually:
       self._iterations.assign(self._iterations + 1)
 
-  def initial_state(self, batch_size): # todo
-    return ()
+  def initial_state(self, batch_size): # todo check
+    result_state = []
+    for net_num in self._observation_to_network_mapping:
+      result_state.append(self._network[net_num].initial_state(batch_size))
+    return result_state
 
   def make_checkpoints(self):
     self._ckpt = [tf.train.Checkpoint(agent=self._network[i], optimizer=self._optimizers[i]) for i in
@@ -352,12 +355,14 @@ class NNManager():
     policy_logits = []
     baseline = []
     num_agents = len(self._observation_to_network_mapping)
+    new_core_state = [None] * num_agents
     for i in range(num_agents):
       net_num = self._observation_to_network_mapping[i]
       logging.info('for %d net %d', i, net_num)
 
-      o, s = self._network[net_num](input_[i], core_state, unroll=True, is_training=is_training)  # todo change core_state
+      o, s = self._network[net_num](input_[i], core_state[i], unroll=True, is_training=is_training)  # todo change core_state
       logging.info('o %s', str(o))
+      new_core_state[i] = s
 
       new_action.append(prefix_permute(o.action, [2, 0, 1]))
       policy_logits.append(prefix_permute(o.policy_logits, [2, 0, 1])) # todo think
@@ -368,4 +373,4 @@ class NNManager():
 
     output = self._prepare_call_output(new_action, policy_logits, baseline, unroll)
 
-    return output, core_state
+    return output, new_core_state
