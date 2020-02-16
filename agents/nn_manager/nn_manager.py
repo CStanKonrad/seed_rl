@@ -107,10 +107,25 @@ def decode_string_config(config):
   else:
       return json.loads(config)
 
+
+def support_legacy_config(config):
+  config = config.copy()
+  network_actions_spec = config['network_actions_spec']
+
+  lenghts = list(map(len, network_actions_spec))
+  min_lenght = np.min(lenghts)
+  max_length = np.max(lenghts)
+  if min_lenght != 2 or max_length != 2 or network_actions_spec[0][0] == network_actions_spec[0][1]:
+    new_network_actions_spec = [[0, len(l)] for l in network_actions_spec]
+    config['network_actions_spec'] = new_network_actions_spec
+  return config
+
+
 class NNManager():
   def __init__(self, create_agent_fn, env_output_specs, action_space, logdir, save_checkpoint_secs, config,
                observation_space=()):
     config = decode_string_config(config)
+    config = support_legacy_config(config)
 
     self._original_action_space = action_space
 
