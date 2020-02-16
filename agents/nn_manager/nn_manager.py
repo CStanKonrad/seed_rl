@@ -3,14 +3,14 @@ import tensorflow as tf
 import time
 from absl import logging
 from seed_rl.common.utils import EnvOutput
-#from seed_rl.football import observation as observation_processor
+# from seed_rl.football import observation as observation_processor
 import collections
 from seed_rl.common.parametric_distribution import ParametricDistribution, get_parametric_distribution_for_action_space
 import numpy as np
 import json
 
-
 import tensorflow_probability as tfp
+
 tfb = tfp.bijectors
 tfd = tfp.distributions
 
@@ -48,7 +48,6 @@ class NNMDistributionWrapper(ParametricDistribution):
     self._original_distribution = original_distribution
     self._action_log_probs_grouping_fn = action_log_probs_grouping_fn
 
-
   def create_dist(self, parameters):
     return self._original_distribution.create_dist(parameters)
 
@@ -71,7 +70,7 @@ class NNMDistributionWrapper(ParametricDistribution):
     dist = self.create_dist(parameters)
     log_probs = dist.log_prob(actions)
     log_probs -= self._original_distribution._postprocessor.forward_log_det_jacobian(
-        tf.cast(actions, tf.float32), event_ndims=0)
+      tf.cast(actions, tf.float32), event_ndims=0)
     logging.info('Log probs ungrouped %s', str(log_probs))
     if self._original_distribution._event_ndims == 1:
       log_probs = self._action_log_probs_grouping_fn(log_probs)
@@ -105,7 +104,7 @@ def decode_string_config(config):
   if isinstance(config, dict):
     return config
   else:
-      return json.loads(config)
+    return json.loads(config)
 
 
 def support_legacy_config(config):
@@ -148,12 +147,11 @@ class NNManager():
       self._network_config = [self._network_config[0]] * self._num_networks
 
     self._network = [create_agent_fn(self._network_action_space[i], (), self._network_action_distribution[i]) for i in
-                     range(self._num_networks)] # todo change () to proper observation_space priority: low
+                     range(self._num_networks)]  # todo change () to proper observation_space priority: low
 
     for i in range(self._num_networks):
       if hasattr(self._network[i], 'change_config'):
         self._network[i].change_config(self._network_config[i])
-
 
     # by default iteration number is picked from  optimizer of the first network
     # if the first network is not updated then NNManager handles iterations manually
@@ -201,8 +199,7 @@ class NNManager():
         self.trainable_variables.extend(self._network[i].trainable_variables)
     self.trainable_variables = tuple(self.trainable_variables)
 
-
-  def get_action_groups(self): # todo asserts
+  def get_action_groups(self):  # todo asserts
     groups = []
     for i in self._observation_to_network_mapping:
       groups.append(self._network_action_spec[i][1] - self._network_action_spec[i][0])
@@ -239,7 +236,7 @@ class NNManager():
     if self._handle_iterations_manually:
       self._iterations.assign(self._iterations + 1)
 
-  def initial_state(self, batch_size): # todo check
+  def initial_state(self, batch_size):  # todo check
     result_state = []
     for net_num in self._observation_to_network_mapping:
       result_state.append(self._network[net_num].initial_state(batch_size))
@@ -284,8 +281,6 @@ class NNManager():
 
     logging.info('discounts after %s', str(discounts))
     return discounts
-
-
 
   def _prepare_input(self, input_, unroll):
     if not unroll:
@@ -346,8 +341,6 @@ class NNManager():
       output = tf.nest.map_structure(lambda t: tf.squeeze(t, 0), output)
     return output
 
-
-
   def __call__(self, input_, core_state, unroll=False, is_training=False):
     input_ = self._prepare_input(input_, unroll)
 
@@ -360,12 +353,13 @@ class NNManager():
       net_num = self._observation_to_network_mapping[i]
       logging.info('for %d net %d', i, net_num)
 
-      o, s = self._network[net_num](input_[i], core_state[i], unroll=True, is_training=is_training)  # todo change core_state
+      o, s = self._network[net_num](input_[i], core_state[i], unroll=True,
+                                    is_training=is_training)  # todo change core_state
       logging.info('o %s', str(o))
       new_core_state[i] = s
 
       new_action.append(prefix_permute(o.action, [2, 0, 1]))
-      policy_logits.append(prefix_permute(o.policy_logits, [2, 0, 1])) # todo think
+      policy_logits.append(prefix_permute(o.policy_logits, [2, 0, 1]))  # todo think
       baseline.append(o.baseline)
 
     logging.info('Ends with before mangle new_actions %s', str(new_action))
