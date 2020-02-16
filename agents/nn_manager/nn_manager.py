@@ -83,10 +83,8 @@ class NNMDistributionWrapper(ParametricDistribution):
 
 def split_action_space(action_space, split_data):
   if isinstance(action_space, gym.spaces.Discrete):
-    assert len(split_data) == 1 and split_data[0] == [0, 1]
     return [action_space]
   elif isinstance(action_space, gym.spaces.MultiDiscrete):
-    assert np.sum(np.diff(split_data, axis=-1)) == len(action_space.nvec)
     output = []
     for s in split_data:
       new_as = gym.spaces.MultiDiscrete(action_space.nvec[s[0]:s[1]])
