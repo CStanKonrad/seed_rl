@@ -354,7 +354,7 @@ class NNManager():
       logging.info('for %d net %d', i, net_num)
 
       o, s = self._network[net_num](input_[i], core_state[i], unroll=True,
-                                    is_training=is_training)  # todo change core_state
+                                    is_training=is_training)
       logging.info('o %s', str(o))
       new_core_state[i] = s
 
