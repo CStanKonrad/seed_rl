@@ -446,7 +446,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
           for (frames, ep_return, raw_return) in zip(*episode_stats):
             logging.info('Return: %s Raw return: %f Frames: %i',
-                         str(ep_return.numpy),
+                         str(ep_return.numpy()),
                          raw_return, frames)
 
       logs = minimize(it)
