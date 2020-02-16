@@ -20,7 +20,6 @@ import tensorflow as tf
 from seed_rl.common import utils
 import numpy as np
 
-
 AgentOutput = collections.namedtuple('AgentOutput',
                                      'action policy_logits baseline')
 
@@ -29,24 +28,23 @@ class _Stack(tf.Module):
   """Stack of pooling and convolutional blocks with residual connections."""
 
   def __init__(self, num_ch, num_blocks):
-
     super(_Stack, self).__init__(name='stack')
     self._conv = tf.keras.layers.Conv2D(num_ch, 3, strides=1, padding='same',
                                         kernel_initializer='lecun_normal')
     self._max_pool = tf.keras.layers.MaxPool2D(
-        pool_size=3, padding='same', strides=2)
+      pool_size=3, padding='same', strides=2)
 
     self._res_convs0 = [
-        tf.keras.layers.Conv2D(
-            num_ch, 3, strides=1, padding='same', name='res_%d/conv2d_0' % i,
-            kernel_initializer='lecun_normal')
-        for i in range(num_blocks)
+      tf.keras.layers.Conv2D(
+        num_ch, 3, strides=1, padding='same', name='res_%d/conv2d_0' % i,
+        kernel_initializer='lecun_normal')
+      for i in range(num_blocks)
     ]
     self._res_convs1 = [
-        tf.keras.layers.Conv2D(
-            num_ch, 3, strides=1, padding='same', name='res_%d/conv2d_1' % i,
-            kernel_initializer='lecun_normal')
-        for i in range(num_blocks)
+      tf.keras.layers.Conv2D(
+        num_ch, 3, strides=1, padding='same', name='res_%d/conv2d_1' % i,
+        kernel_initializer='lecun_normal')
+      for i in range(num_blocks)
     ]
 
   def __call__(self, conv_out):
@@ -101,8 +99,6 @@ def choose_action(action_specs, policy_logits, sample=True):
   return new_action
 
 
-
-
 class GFootball(tf.Module):
   """Agent with ResNet, but without LSTM and additional inputs.
 
@@ -116,27 +112,26 @@ class GFootball(tf.Module):
 
     # Parameters and layers for unroll.
 
-
     self._action_specs = action_specs
 
     # Parameters and layers for _torso.
     self._stacks = [
-        _Stack(num_ch, num_blocks)
-        for num_ch, num_blocks in [(16, 2), (32, 2), (32, 2), (32, 2)]
+      _Stack(num_ch, num_blocks)
+      for num_ch, num_blocks in [(16, 2), (32, 2), (32, 2), (32, 2)]
     ]
     self._conv_to_linear = tf.keras.layers.Dense(
-        256, kernel_initializer='lecun_normal')
+      256, kernel_initializer='lecun_normal')
 
     # Layers for _head.
     self._policy_logits = make_logits(
-          lambda num_units, name: tf.keras.layers.Dense(
-            num_units,
-            name=name,
-            kernel_initializer='lecun_normal'),
-          self._action_specs)
+      lambda num_units, name: tf.keras.layers.Dense(
+        num_units,
+        name=name,
+        kernel_initializer='lecun_normal'),
+      self._action_specs)
 
     self._baseline = tf.keras.layers.Dense(
-        1, name='baseline', kernel_initializer='lecun_normal')
+      1, name='baseline', kernel_initializer='lecun_normal')
 
   def initial_state(self, batch_size):
     return ()
@@ -161,11 +156,10 @@ class GFootball(tf.Module):
     return tf.nn.relu(conv_out)
 
   def _head(self, core_output):
-
     policy_logits = apply_net(
-          self._action_specs,
-          self._policy_logits,
-          core_output)
+      self._action_specs,
+      self._policy_logits,
+      core_output)
     baseline = tf.squeeze(self._baseline(core_output), axis=-1)
 
     # Sample an action from the policy.

@@ -24,7 +24,6 @@ import json
 
 FLAGS = flags.FLAGS
 
-
 # Environment settings.
 flags.DEFINE_string('env_config',
                     '',
