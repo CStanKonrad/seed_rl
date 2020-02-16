@@ -72,10 +72,10 @@ class NNMDistributionWrapper(ParametricDistribution):
     log_probs = dist.log_prob(actions)
     log_probs -= self._original_distribution._postprocessor.forward_log_det_jacobian(
         tf.cast(actions, tf.float32), event_ndims=0)
-    logging.info("Log probs ungrouped %s", str(log_probs))
+    logging.info('Log probs ungrouped %s', str(log_probs))
     if self._original_distribution._event_ndims == 1:
       log_probs = self._action_log_probs_grouping_fn(log_probs)
-    logging.info("Log probs grouped %s", str(log_probs))
+    logging.info('Log probs grouped %s', str(log_probs))
     return log_probs
 
   def entropy(self, parameters):
