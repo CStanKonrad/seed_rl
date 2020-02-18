@@ -26,7 +26,7 @@ from absl import flags
 from absl import logging
 
 from seed_rl import grpc
-from seed_rl.common import common_flags  
+from seed_rl.common import common_flags
 from seed_rl.common import utils
 from seed_rl.common import vtrace
 from seed_rl.common.parametric_distribution import get_parametric_distribution_for_action_space
@@ -230,13 +230,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
     iterations = agent.iterations()
 
-    # ON_READ causes the replicated variable to act as independent variables for
-    # each replica.
-    temp_grads = [
-        tf.Variable(tf.zeros_like(v), trainable=False,
-                    synchronization=tf.VariableSynchronization.ON_READ)
-        for v in agent.trainable_variables
-    ]
+    num_replicas_in_sync = strategy.num_replicas_in_sync
 
   @tf.function
   def minimize(iterator):
@@ -246,20 +240,19 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       args = tf.nest.pack_sequence_as(unroll_specs, decode(args, data))
       with tf.GradientTape() as tape:
         loss, logs = compute_loss(parametric_action_distribution, agent, *args)
+        loss = loss * (1.0 / num_replicas_in_sync) # average among replicas (simulates bigger batch)
+
       grads = tape.gradient(loss, agent.trainable_variables)
-      for t, g in zip(temp_grads, grads):
-        t.assign(g)
+
+      agent.optimize(grads)
+
       return loss, logs
 
     loss, logs = training_strategy.experimental_run_v2(compute_gradients,
                                                        (data,))
-    loss = training_strategy.experimental_local_results(loss)[0]
+
     logs = training_strategy.experimental_local_results(logs)
 
-    def apply_gradients(_):
-      agent.optimize(temp_grads)
-
-    strategy.experimental_run_v2(apply_gradients, (loss,))
     agent.post_optimize()
 
     return logs
@@ -450,13 +443,13 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
                          raw_return, frames)
 
       logs = minimize(it)
-
       for per_replica_logs in logs:
         assert len(log_keys) == len(per_replica_logs)
         for key, value in zip(log_keys, per_replica_logs):
+          logging.info('From replicas %s:%s', key, str(value))
           values_to_log[key].extend(
-              x.numpy()
-              for x in training_strategy.experimental_local_results(value))
+            x.numpy()
+            for x in training_strategy.experimental_local_results(value))
 
       log_future.result()  # Raise exception if any occurred in logging.
       log_future = executor.submit(log, iterations, num_env_frames)

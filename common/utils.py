@@ -84,7 +84,7 @@ def init_learner(num_training_tpus):
     tf.device('/cpu').__enter__()
     any_gpu = tf.config.experimental.list_logical_devices('GPU')
     device_name = '/device:GPU:0' if any_gpu else '/device:CPU:0'
-    strategy = tf.distribute.OneDeviceStrategy(device=device_name)
+    strategy = tf.distribute.MirroredStrategy()
     enc = lambda x: x
     dec = lambda x, s=None: x if s is None else tf.nest.pack_sequence_as(s, x)
     return Settings(strategy, [device_name], strategy, enc, dec)
