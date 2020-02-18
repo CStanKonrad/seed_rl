@@ -71,10 +71,10 @@ class NNMDistributionWrapper(ParametricDistribution):
     log_probs = dist.log_prob(actions)
     log_probs -= self._original_distribution._postprocessor.forward_log_det_jacobian(
       tf.cast(actions, tf.float32), event_ndims=0)
-    logging.info('Log probs ungrouped %s', str(log_probs))
+    # logging.info('Log probs ungrouped %s', str(log_probs))
     if self._original_distribution._event_ndims == 1:
       log_probs = self._action_log_probs_grouping_fn(log_probs)
-    logging.info('Log probs grouped %s', str(log_probs))
+    # logging.info('Log probs grouped %s', str(log_probs))
     return log_probs
 
   def entropy(self, parameters):
@@ -270,14 +270,14 @@ class NNManager():
         self._save_checkpoints_for(i)
 
   def adjust_discounts(self, discounts):
-    logging.info('discounts before %s', str(discounts))
+    # logging.info('discounts before %s', str(discounts))
     if not self._single_agent:
       discounts = tf.expand_dims(discounts, -1)
       rep_m = [1] * len(discounts.shape)
       rep_m[-1] = len(self._observation_to_network_mapping)
       discounts = tf.tile(discounts, rep_m)
 
-    logging.info('discounts after %s', str(discounts))
+    # logging.info('discounts after %s', str(discounts))
     return discounts
 
   def _prepare_input(self, input_, unroll):
@@ -285,17 +285,17 @@ class NNManager():
       # Add time dimension.
       input_ = tf.nest.map_structure(lambda t: tf.expand_dims(t, 0), input_)
 
-    logging.info('Preparing input %s', str(input_))
+    # logging.info('Preparing input %s', str(input_))
     if self._single_agent:
       return [input_]
     else:
       prev_actions, env_outputs = input_
 
-      logging.info('Called with prev_action before mangle %s', str(prev_actions))
+      # logging.info('Called with prev_action before mangle %s', str(prev_actions))
       prev_actions = prefix_permute(prev_actions, [2, 0, 1])
       prev_actions = group_tensors(prev_actions, self.get_action_groups())
       prev_actions = tf.nest.map_structure(lambda t: tf.transpose(t, perm=[1, 2, 0]), prev_actions)
-      logging.info('Called with prev_action after mangle %s', str(prev_actions))
+      # logging.info('Called with prev_action after mangle %s', str(prev_actions))
 
       def prepare_observation(observation):
         return prefix_permute(observation, [2, 0, 1])
@@ -314,7 +314,7 @@ class NNManager():
       for i in range(num_observations):
         input_.append((prev_actions[i], EnvOutput(permuted_reward[i], done, permuted_observation[i])))
 
-      logging.info('Processed input %s', str(input_))
+      # logging.info('Processed input %s', str(input_))
 
       return input_
 
@@ -332,7 +332,7 @@ class NNManager():
 
     output = AgentOutput(new_action, policy_logits, baseline)
 
-    logging.info('Ends with after mangle output %s', str(output))
+    # logging.info('Ends with after mangle output %s', str(output))
 
     if not unroll:
       # Remove time dimension.
@@ -349,19 +349,19 @@ class NNManager():
     new_core_state = [None] * num_agents
     for i in range(num_agents):
       net_num = self._observation_to_network_mapping[i]
-      logging.info('for %d net %d', i, net_num)
+      # logging.info('for %d net %d', i, net_num)
 
       o, s = self._network[net_num](input_[i], core_state[i], unroll=True,
                                     is_training=is_training)
-      logging.info('o %s', str(o))
+      # logging.info('o %s', str(o))
       new_core_state[i] = s
 
       new_action.append(prefix_permute(o.action, [2, 0, 1]))
       policy_logits.append(prefix_permute(o.policy_logits, [2, 0, 1]))  # todo think
       baseline.append(o.baseline)
 
-    logging.info('Ends with before mangle new_actions %s', str(new_action))
-    logging.info('Ends with before mangle policy_logits %s', str(policy_logits))
+    # logging.info('Ends with before mangle new_actions %s', str(new_action))
+    # logging.info('Ends with before mangle policy_logits %s', str(policy_logits))
 
     output = self._prepare_call_output(new_action, policy_logits, baseline, unroll)
 
