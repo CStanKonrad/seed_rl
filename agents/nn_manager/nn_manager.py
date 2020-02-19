@@ -187,6 +187,9 @@ class NNManager():
     logging.info('NNManager: networks configs : %s', str(self._network_config))
     logging.info('NNManager: single agent : %s', str(self._single_agent))
 
+  def get_number_of_agents(self):
+    return len(self._observation_to_network_mapping)
+
   def get_action_space_distribution(self):
     original_distribution = get_parametric_distribution_for_action_space(self._original_action_space)
 
@@ -288,6 +291,10 @@ class NNManager():
     logging.info('discounts after %s', str(discounts))
     return discounts
 
+  def vtrace_adjust_loss(self, loss):
+    # total loss was divided by number of agents during tf.reduce_mean ops
+    return loss
+
   def _prepare_input(self, input_, unroll):
     if not unroll:
       # Add time dimension.
@@ -353,7 +360,7 @@ class NNManager():
     new_action = []
     policy_logits = []
     baseline = []
-    num_agents = len(self._observation_to_network_mapping)
+    num_agents = self.get_number_of_agents()
     new_core_state = [None] * num_agents
     for i in range(num_agents):
       net_num = self._observation_to_network_mapping[i]
