@@ -223,8 +223,9 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
     initial_agent_output, _ = create_variables(input_, initial_agent_state)
     # Create optimizer.
+    num_replicas_in_sync = strategy.num_replicas_in_sync
     iter_frame_ratio = (
-        FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats)
+        FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats * num_replicas_in_sync)
     final_iteration = int(
         math.ceil(FLAGS.total_environment_frames / iter_frame_ratio))
 
@@ -232,8 +233,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     agent.create_optimizers(create_optimizer_fn, final_iteration)
 
     iterations = agent.iterations()
-
-    num_replicas_in_sync = strategy.num_replicas_in_sync
 
   @tf.function
   def minimize(iterator):
