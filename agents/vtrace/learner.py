@@ -133,6 +133,9 @@ def compute_loss(parametric_action_distribution, agent, agent_state,
 
   total_loss = policy_loss + v_loss + entropy_loss + kl_loss
 
+  total_loss = agent.vtrace_adjust_loss(total_loss)
+
+
   # logging
   del log_keys[:]
   log_values = []
