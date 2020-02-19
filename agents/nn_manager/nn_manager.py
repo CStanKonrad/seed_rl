@@ -47,6 +47,7 @@ class NNMDistributionWrapper(ParametricDistribution):
   def __init__(self, original_distribution, action_log_probs_grouping_fn):
     self._original_distribution = original_distribution
     self._action_log_probs_grouping_fn = action_log_probs_grouping_fn
+    self._entropy_grouping_fn = action_log_probs_grouping_fn
 
   def create_dist(self, parameters):
     return self._original_distribution.create_dist(parameters)
@@ -78,7 +79,14 @@ class NNMDistributionWrapper(ParametricDistribution):
     return log_probs
 
   def entropy(self, parameters):
-    return self._original_distribution.entropy(parameters)
+    """Return the entropy of the given distribution."""
+    dist = self.create_dist(parameters)
+    entropy = dist.entropy()
+    entropy += self._original_distribution._postprocessor.forward_log_det_jacobian(
+      tf.cast(dist.sample(), tf.float32), event_ndims=0)
+    if self._original_distribution._event_ndims == 1:
+      entropy = self._entropy_grouping_fn(entropy)
+    return entropy
 
 
 def split_action_space(action_space, split_data):
