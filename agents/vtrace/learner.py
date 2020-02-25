@@ -64,7 +64,7 @@ flags.DEFINE_float('max_abs_reward', 0.,
 flags.DEFINE_integer('num_actors', 4, 'Number of actors.')
 
 # Logging
-flags.DEFINE_integer('log_batch_frequency', 1, 'We average that many batches '
+flags.DEFINE_integer('log_batch_frequency', 100, 'We average that many batches '
                      'before logging batch statistics like entropy.')
 flags.DEFINE_integer('log_episode_frequency', 1, 'We average that many episodes'
                      ' before logging average episode return and length.')
@@ -287,11 +287,13 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   actor_infos = utils.Aggregator(FLAGS.num_actors, info_specs)
 
   # First agent state in an unroll.
-  first_agent_states = utils.Aggregator(FLAGS.num_actors, agent_state_specs)
+  first_agent_states = utils.Aggregator(
+      FLAGS.num_actors, agent_state_specs, 'first_agent_states')
 
   # Current agent state and action.
-  agent_states = utils.Aggregator(FLAGS.num_actors, agent_state_specs)
-  actions = utils.Aggregator(FLAGS.num_actors, action_specs)
+  agent_states = utils.Aggregator(
+      FLAGS.num_actors, agent_state_specs, 'agent_states')
+  actions = utils.Aggregator(FLAGS.num_actors, action_specs, 'actions')
 
   unroll_specs = Unroll(agent_state_specs, *store.unroll_specs)
   unroll_queue = utils.StructuredFIFOQueue(1, unroll_specs)
