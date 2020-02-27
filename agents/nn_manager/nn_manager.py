@@ -8,6 +8,7 @@ import collections
 from seed_rl.common.parametric_distribution import ParametricDistribution, get_parametric_distribution_for_action_space
 import numpy as np
 import json
+import os
 
 import tensorflow_probability as tfp
 
@@ -254,8 +255,9 @@ class NNManager():
   def make_checkpoints(self):
     self._ckpt = [tf.train.Checkpoint(agent=self._network[i], optimizer=self._optimizers[i]) for i in
                   range(self._num_networks)]
-    self._manager = [tf.train.CheckpointManager(self._ckpt[i], self._logdir + f"/ckpt/{i}", max_to_keep=1,
-                                                keep_checkpoint_every_n_hours=2) for i in range(self._num_networks)]
+    self._manager = [
+      tf.train.CheckpointManager(self._ckpt[i], os.path.join(self._logdir, 'ckpt', str(i)), max_to_keep=1,
+                                 keep_checkpoint_every_n_hours=2) for i in range(self._num_networks)]
     current_time = time.time()
     for i in range(self._num_networks):
       self._last_ckpt_time[i] = 0  # Force checkpointing of the initial model.
