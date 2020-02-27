@@ -318,22 +318,14 @@ class NNManager():
       prev_actions = tf.nest.map_structure(lambda t: tf.transpose(t, perm=[1, 2, 0]), prev_actions)
       logging.info('Called with prev_action after mangle %s', str(prev_actions))
 
-      def prepare_observation(observation):
-        return prefix_permute(observation, [2, 0, 1])
-
-      permuted_observation = tf.xla.experimental.compile(prepare_observation, [env_outputs.observation])[
-        0] if tf.test.is_gpu_available() else prepare_observation(env_outputs.observation)
-
-      permuted_reward = prefix_permute(env_outputs.reward, [2, 0, 1])
-
       done = env_outputs.done
 
-      num_observations = permuted_observation.shape[0]
+      num_observations = env_outputs.observation.shape[2]
       assert num_observations == self.get_number_of_agents()
 
       input_ = []
       for i in range(num_observations):
-        input_.append((prev_actions[i], EnvOutput(permuted_reward[i], done, permuted_observation[i])))
+        input_.append((prev_actions[i], EnvOutput(env_outputs.reward[:, :, i], done, env_outputs.observation[:, :, i])))
 
       logging.info('Processed input %s', str(input_))
 
@@ -341,14 +333,12 @@ class NNManager():
 
   def _prepare_call_output(self, new_action, policy_logits, baseline, unroll):
 
-    new_action = tf.concat(new_action, axis=0)
-    policy_logits = tf.concat(policy_logits, axis=0)
+    new_action = tf.concat(new_action, axis=2)
+    policy_logits = tf.concat(policy_logits, axis=2)
     baseline = tf.stack(baseline)
     if self._single_agent:
       baseline = tf.squeeze(baseline, axis=0)
     else:
-      new_action = prefix_permute(new_action, [1, 2, 0])
-      policy_logits = prefix_permute(policy_logits, [1, 2, 0])
       baseline = prefix_permute(baseline, [1, 2, 0])
 
     output = AgentOutput(new_action, policy_logits, baseline)
@@ -377,8 +367,8 @@ class NNManager():
       logging.info('o %s', str(o))
       new_core_state[i] = s
 
-      new_action.append(prefix_permute(o.action, [2, 0, 1]))
-      policy_logits.append(prefix_permute(o.policy_logits, [2, 0, 1]))  # todo think
+      new_action.append(o.action)
+      policy_logits.append(o.policy_logits)
       baseline.append(o.baseline)
 
     logging.info('Ends with before mangle new_actions %s', str(new_action))
