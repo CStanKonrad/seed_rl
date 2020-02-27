@@ -268,21 +268,23 @@ class NNManager():
         self._ckpt[i].restore(self._manager[i].latest_checkpoint).assert_consumed()
         self._last_ckpt_time[i] = int(current_time)
 
-  def _save_checkpoints_for(self, network_id):
+  def _save_model_data_for_network(self, network_id):
     time_stamp = time.time()
     self._manager[network_id].save()
+    tf.saved_model.save(self._network[network_id], os.path.join(self._logdir, 'model', str(network_id), os.path.split(
+      self._manager[network_id].latest_checkpoint)[1]))
     self._last_ckpt_time[network_id] = int(time_stamp)
 
-  def manage_checkpoints(self):
+  def manage_models_data(self):
     current_time = time.time()
     for i in range(self._num_networks):
       if (self._network_learning[i]) and (current_time - self._last_ckpt_time[i] >= self._save_checkpoint_secs):
-        self._save_checkpoints_for(i)
+        self._save_model_data_for_network(i)
 
-  def save_checkpoints(self):
+  def save(self):
     for i in range(self._num_networks):
       if self._network_learning[i]:
-        self._save_checkpoints_for(i)
+        self._save_model_data_for_network(i)
 
   def adjust_discounts(self, discounts):
     logging.info('discounts before %s', str(discounts))
