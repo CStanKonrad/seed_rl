@@ -285,7 +285,7 @@ class NNManager():
     if not self._single_agent:
       discounts = tf.expand_dims(discounts, -1)
       rep_m = [1] * len(discounts.shape)
-      rep_m[-1] = len(self._observation_to_network_mapping)
+      rep_m[-1] = self.get_number_of_agents()
       discounts = tf.tile(discounts, rep_m)
 
     logging.info('discounts after %s', str(discounts))
@@ -323,7 +323,7 @@ class NNManager():
       done = env_outputs.done
 
       num_observations = permuted_observation.shape[0]
-      assert num_observations == len(self._observation_to_network_mapping)
+      assert num_observations == self.get_number_of_agents()
 
       input_ = []
       for i in range(num_observations):
