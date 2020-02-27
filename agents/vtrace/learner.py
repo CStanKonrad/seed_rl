@@ -406,7 +406,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       tf.summary.experimental.set_step(num_env_frames)
 
       # Save checkpoint.
-      agent.manage_checkpoints()
+      agent.manage_models_data()
 
       def log(iterations, num_env_frames):
         """Logs batch and episodes summaries."""
@@ -458,6 +458,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       log_future.result()  # Raise exception if any occurred in logging.
       log_future = executor.submit(log, iterations, num_env_frames)
 
-  agent.save_checkpoints()
+  agent.save()
   server.shutdown()
   unroll_queue.close()

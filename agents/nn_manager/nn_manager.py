@@ -8,6 +8,7 @@ import collections
 from seed_rl.common.parametric_distribution import ParametricDistribution, get_parametric_distribution_for_action_space
 import numpy as np
 import json
+import os
 
 import tensorflow_probability as tfp
 
@@ -223,6 +224,8 @@ class NNManager():
       optimizer._create_hypers()
       optimizer._create_slots(self._network[i].trainable_variables)
 
+      optimizer.iterations # create optimizer iterations variable
+
       self._optimizers.append(optimizer)
       self._learning_rate_fn.append(learning_rate_fn)
 
@@ -254,38 +257,41 @@ class NNManager():
   def make_checkpoints(self):
     self._ckpt = [tf.train.Checkpoint(agent=self._network[i], optimizer=self._optimizers[i]) for i in
                   range(self._num_networks)]
-    self._manager = [tf.train.CheckpointManager(self._ckpt[i], self._logdir + f"/ckpt/{i}", max_to_keep=1,
-                                                keep_checkpoint_every_n_hours=2) for i in range(self._num_networks)]
+    self._manager = [
+      tf.train.CheckpointManager(self._ckpt[i], os.path.join(self._logdir, 'ckpt', str(i)), max_to_keep=1,
+                                 keep_checkpoint_every_n_hours=2) for i in range(self._num_networks)]
     current_time = time.time()
     for i in range(self._num_networks):
       self._last_ckpt_time[i] = 0  # Force checkpointing of the initial model.
       if self._manager[i].latest_checkpoint:
         logging.info('Restoring checkpoint: %s for network %i', self._manager[i].latest_checkpoint, i)
-        self._ckpt[i].restore(self._manager[i].latest_checkpoint)  # .assert_consumed()
+        self._ckpt[i].restore(self._manager[i].latest_checkpoint).assert_consumed()
         self._last_ckpt_time[i] = int(current_time)
 
-  def _save_checkpoints_for(self, network_id):
+  def _save_model_data_for_network(self, network_id):
     time_stamp = time.time()
     self._manager[network_id].save()
+    tf.saved_model.save(self._network[network_id], os.path.join(self._logdir, 'model', str(network_id), os.path.split(
+      self._manager[network_id].latest_checkpoint)[1]))
     self._last_ckpt_time[network_id] = int(time_stamp)
 
-  def manage_checkpoints(self):
+  def manage_models_data(self):
     current_time = time.time()
     for i in range(self._num_networks):
       if (self._network_learning[i]) and (current_time - self._last_ckpt_time[i] >= self._save_checkpoint_secs):
-        self._save_checkpoints_for(i)
+        self._save_model_data_for_network(i)
 
-  def save_checkpoints(self):
+  def save(self):
     for i in range(self._num_networks):
       if self._network_learning[i]:
-        self._save_checkpoints_for(i)
+        self._save_model_data_for_network(i)
 
   def adjust_discounts(self, discounts):
     # logging.info('discounts before %s', str(discounts))
     if not self._single_agent:
       discounts = tf.expand_dims(discounts, -1)
       rep_m = [1] * len(discounts.shape)
-      rep_m[-1] = len(self._observation_to_network_mapping)
+      rep_m[-1] = self.get_number_of_agents()
       discounts = tf.tile(discounts, rep_m)
 
     # logging.info('discounts after %s', str(discounts))
@@ -312,22 +318,14 @@ class NNManager():
       prev_actions = tf.nest.map_structure(lambda t: tf.transpose(t, perm=[1, 2, 0]), prev_actions)
       # logging.info('Called with prev_action after mangle %s', str(prev_actions))
 
-      def prepare_observation(observation):
-        return prefix_permute(observation, [2, 0, 1])
-
-      permuted_observation = tf.xla.experimental.compile(prepare_observation, [env_outputs.observation])[
-        0] if tf.test.is_gpu_available() else prepare_observation(env_outputs.observation)
-
-      permuted_reward = prefix_permute(env_outputs.reward, [2, 0, 1])
-
       done = env_outputs.done
 
-      num_observations = permuted_observation.shape[0]
-      assert num_observations == len(self._observation_to_network_mapping)
+      num_observations = env_outputs.observation.shape[2]
+      assert num_observations == self.get_number_of_agents()
 
       input_ = []
       for i in range(num_observations):
-        input_.append((prev_actions[i], EnvOutput(permuted_reward[i], done, permuted_observation[i])))
+        input_.append((prev_actions[i], EnvOutput(env_outputs.reward[:, :, i], done, env_outputs.observation[:, :, i])))
 
       # logging.info('Processed input %s', str(input_))
 
@@ -335,14 +333,12 @@ class NNManager():
 
   def _prepare_call_output(self, new_action, policy_logits, baseline, unroll):
 
-    new_action = tf.concat(new_action, axis=0)
-    policy_logits = tf.concat(policy_logits, axis=0)
+    new_action = tf.concat(new_action, axis=2)
+    policy_logits = tf.concat(policy_logits, axis=2)
     baseline = tf.stack(baseline)
     if self._single_agent:
       baseline = tf.squeeze(baseline, axis=0)
     else:
-      new_action = prefix_permute(new_action, [1, 2, 0])
-      policy_logits = prefix_permute(policy_logits, [1, 2, 0])
       baseline = prefix_permute(baseline, [1, 2, 0])
 
     output = AgentOutput(new_action, policy_logits, baseline)
@@ -371,8 +367,8 @@ class NNManager():
       # logging.info('o %s', str(o))
       new_core_state[i] = s
 
-      new_action.append(prefix_permute(o.action, [2, 0, 1]))
-      policy_logits.append(prefix_permute(o.policy_logits, [2, 0, 1]))  # todo think
+      new_action.append(o.action)
+      policy_logits.append(o.policy_logits)
       baseline.append(o.baseline)
 
     # logging.info('Ends with before mangle new_actions %s', str(new_action))
