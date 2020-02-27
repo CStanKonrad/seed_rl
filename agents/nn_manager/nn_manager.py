@@ -224,6 +224,8 @@ class NNManager():
       optimizer._create_hypers()
       optimizer._create_slots(self._network[i].trainable_variables)
 
+      optimizer.iterations # create optimizer iterations variable
+
       self._optimizers.append(optimizer)
       self._learning_rate_fn.append(learning_rate_fn)
 
@@ -263,7 +265,7 @@ class NNManager():
       self._last_ckpt_time[i] = 0  # Force checkpointing of the initial model.
       if self._manager[i].latest_checkpoint:
         logging.info('Restoring checkpoint: %s for network %i', self._manager[i].latest_checkpoint, i)
-        self._ckpt[i].restore(self._manager[i].latest_checkpoint)  # .assert_consumed()
+        self._ckpt[i].restore(self._manager[i].latest_checkpoint).assert_consumed()
         self._last_ckpt_time[i] = int(current_time)
 
   def _save_checkpoints_for(self, network_id):
