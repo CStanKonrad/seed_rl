@@ -39,5 +39,8 @@ def create_environment(_, env_logdir='', actor_id=None):
     logging.info('Environment will get base_logdir: %s and actor_id %i', env_logdir, actor_id)
     config['base_logdir'] = env_logdir
     config['actor_id'] = actor_id
+  else:
+      config['base_logdir'] = None
+      config['actor_id'] = None
   return observation.PackedBitsObservation(
     gym.make('gfootball_zpp:gfootball-custom-v1', **config))
