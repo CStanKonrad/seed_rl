@@ -47,15 +47,14 @@ def actor_loop(create_env_fn):
       newly created environment.
   """
   logging.info('Starting actor loop')
+  main_logdir = os.path.join(FLAGS.logdir, 'actor_{}'.format(FLAGS.task))
+  env_logdir = main_logdir
   if are_summaries_enabled():
-    main_logdir = os.path.join(FLAGS.logdir, 'actor_{}'.format(FLAGS.task))
-    env_logdir = os.path.join(main_logdir, 'env')
     summary_writer = tf.summary.create_file_writer(
         main_logdir,
         flush_millis=20000, max_queue=1000)
     timer_cls = profiling.ExportingTimer
   else:
-    env_logdir = ''
     summary_writer = tf.summary.create_noop_writer()
     timer_cls = utils.nullcontext
 
@@ -68,8 +67,8 @@ def actor_loop(create_env_fn):
 
         # Checks whenever env can provide additional logs
         create_env_fn_params = signature(create_env_fn).parameters
-        if 'env_logdir' in create_env_fn_params:
-          env = create_env_fn(FLAGS.task, env_logdir=env_logdir)
+        if 'env_logdir' in create_env_fn_params and 'actor_id' in create_env_fn_params:
+          env = create_env_fn(FLAGS.task, env_logdir=env_logdir, actor_id=FLAGS.task)
         else:
           env = create_env_fn(FLAGS.task)
 
