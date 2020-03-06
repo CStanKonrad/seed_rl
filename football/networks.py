@@ -122,9 +122,10 @@ class GFootball(tf.Module):
     self._conv_to_linear = tf.keras.layers.Dense(
       256, kernel_initializer='lecun_normal')
 
-    self._core = tf.keras.layers.LSTMCell(256)
-    self._mlp_after_lstm = tf.keras.layers.Dense(
-      256, "relu", kernel_initializer="lecun_normal")
+    self._core = tf.keras.layers.StackedRNNCells(
+      [tf.keras.layers.LSTMCell(256) for _ in range(3)])
+    self._mlp_after_lstm = tf.keras.Sequential([tf.keras.layers.Dense(
+      256, "relu", kernel_initializer="lecun_normal") for _ in range(3)])
 
     # Layers for _head.
     self._policy_logits = make_logits(
