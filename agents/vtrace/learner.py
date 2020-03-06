@@ -225,7 +225,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     # Create optimizer.
     num_replicas_in_sync = strategy.num_replicas_in_sync
     iter_frame_ratio = (
-        FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats * num_replicas_in_sync)
+        FLAGS.batch_size * FLAGS.unroll_length * FLAGS.num_action_repeats)
     final_iteration = int(
         math.ceil(FLAGS.total_environment_frames / iter_frame_ratio))
 
