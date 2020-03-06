@@ -377,3 +377,11 @@ class NNManager():
     output = self._prepare_call_output(new_action, policy_logits, baseline, unroll)
 
     return output, new_core_state
+
+  def write_summaries(self):
+    """ This method should be called with tf summary writer """
+    for net_id in range(self._num_networks):
+      tf.summary.scalar('nn_manager/network_{}/optimizer/iterations'.format(net_id),
+                        self._optimizers[net_id].iterations)
+      tf.summary.scalar('nn_manager/network_{}/optimizer/learning_rate'.format(net_id),
+                        self._learning_rate_fn[net_id](self._optimizers[net_id].iterations))

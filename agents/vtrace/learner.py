@@ -448,6 +448,8 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
                          str(ep_return.numpy()),
                          raw_return, frames)
 
+        agent.write_summaries()
+
       logs = minimize(it)
       for per_replica_logs in logs:
         assert len(log_keys) == len(per_replica_logs)
