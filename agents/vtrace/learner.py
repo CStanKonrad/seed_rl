@@ -371,9 +371,11 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
   def dequeue(ctx):
     # Create batch (time major).
+    per_replica_batch_size = ctx.get_per_replica_batch_size(FLAGS.batch_size)
+    assert per_replica_batch_size == FLAGS.batch_size / num_replicas_in_sync
     actor_outputs = tf.nest.map_structure(lambda *args: tf.stack(args), *[
         unroll_queue.dequeue()
-        for i in range(ctx.get_per_replica_batch_size(FLAGS.batch_size))
+        for i in range(per_replica_batch_size)
     ])
     actor_outputs = actor_outputs._replace(
         prev_actions=utils.make_time_major(actor_outputs.prev_actions),

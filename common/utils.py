@@ -82,12 +82,13 @@ def init_learner(num_training_tpus):
                     tpu_decode)
   else:
     tf.device('/cpu').__enter__()
-    any_gpu = tf.config.experimental.list_logical_devices('GPU')
-    device_name = '/device:GPU:0' if any_gpu else '/device:CPU:0'
+    gpus = tf.config.experimental.list_logical_devices('GPU')
+    #device_name = '/device:GPU:0' if any_gpu else '/device:CPU:0'
+    gpu_names = [g.name for g in gpus]
     strategy = tf.distribute.MirroredStrategy()
     enc = lambda x: x
     dec = lambda x, s=None: x if s is None else tf.nest.pack_sequence_as(s, x)
-    return Settings(strategy, [device_name], strategy, enc, dec)
+    return Settings(strategy, gpu_names, strategy, enc, dec)
 
 
 class UnrollStore(tf.Module):
