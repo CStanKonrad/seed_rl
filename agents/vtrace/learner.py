@@ -421,7 +421,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
           for key, values in copy.deepcopy(values_to_log).items():
             tf.summary.scalar(key, tf.reduce_mean(values))
           values_to_log.clear()
-          #tf.summary.scalar('learning_rate', learning_rate_fn(iterations))
+          agent.write_summaries()
 
         # log the number of frames per second
         dt = time.time() - last_log_time
@@ -448,7 +448,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
                          str(ep_return.numpy()),
                          raw_return, frames)
 
-        agent.write_summaries()
 
       logs = minimize(it)
       for per_replica_logs in logs:
