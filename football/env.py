@@ -31,12 +31,16 @@ flags.DEFINE_string('env_config',
 flags.DEFINE_integer('num_action_repeats', 1, 'Number of action repeats.')
 
 
-def create_environment(_, env_logdir=''):
+def create_environment(_, env_logdir='', actor_id=None):
   """Returns a gym Football environment."""
   logging.info('Creating environment: %s', FLAGS.env_config)
   config = json.loads(FLAGS.env_config)
-  if env_logdir != '':
-    logging.info('Environment asked to provide logs to: %s', env_logdir)
-    config['logdir'] = env_logdir
+  if env_logdir != '' and actor_id is not None:
+    logging.info('Environment will get base_logdir: %s and actor_id %i', env_logdir, actor_id)
+    config['base_logdir'] = env_logdir
+    config['actor_id'] = actor_id
+  else:
+      config['base_logdir'] = None
+      config['actor_id'] = None
   return observation.PackedBitsObservation(
     gym.make('gfootball_zpp:gfootball-custom-v1', **config))

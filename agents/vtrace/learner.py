@@ -371,9 +371,11 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
 
   def dequeue(ctx):
     # Create batch (time major).
+    per_replica_batch_size = ctx.get_per_replica_batch_size(FLAGS.batch_size)
+    assert per_replica_batch_size == FLAGS.batch_size / num_replicas_in_sync
     actor_outputs = tf.nest.map_structure(lambda *args: tf.stack(args), *[
         unroll_queue.dequeue()
-        for i in range(ctx.get_per_replica_batch_size(FLAGS.batch_size))
+        for i in range(per_replica_batch_size)
     ])
     actor_outputs = actor_outputs._replace(
         prev_actions=utils.make_time_major(actor_outputs.prev_actions),
@@ -406,7 +408,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       tf.summary.experimental.set_step(num_env_frames)
 
       # Save checkpoint.
-      agent.manage_checkpoints()
+      agent.manage_models_data()
 
       def log(iterations, num_env_frames):
         """Logs batch and episodes summaries."""
@@ -419,7 +421,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
           for key, values in copy.deepcopy(values_to_log).items():
             tf.summary.scalar(key, tf.reduce_mean(values))
           values_to_log.clear()
-          #tf.summary.scalar('learning_rate', learning_rate_fn(iterations))
+          agent.write_summaries()
 
         # log the number of frames per second
         dt = time.time() - last_log_time
@@ -446,6 +448,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
                          str(ep_return.numpy()),
                          raw_return, frames)
 
+
       logs = minimize(it)
       for per_replica_logs in logs:
         assert len(log_keys) == len(per_replica_logs)
@@ -458,6 +461,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
       log_future.result()  # Raise exception if any occurred in logging.
       log_future = executor.submit(log, iterations, num_env_frames)
 
-  agent.save_checkpoints()
+  agent.save()
   server.shutdown()
   unroll_queue.close()
