@@ -71,18 +71,30 @@ def actor_loop(create_env_fn):
         raw_reward = 0.0
         done = False
 
+        episode_step = 0
+        episode_return = 0
+        episode_raw_return = 0
+
         while True:
           tf.summary.experimental.set_step(actor_step)
           env_output = utils.EnvOutput(reward, done, observation)
           with timer_cls('actor/elapsed_inference_s', 1000):
             action = client.inference(
-                (FLAGS.task, run_id, env_output, raw_reward))
+                FLAGS.task, run_id, env_output, raw_reward)
           with timer_cls('actor/elapsed_env_step_s', 1000):
             observation, reward, done, info = env.step(action.numpy())
-          raw_reward = float(info.get('score_reward', reward))
+          episode_step += 1
+          episode_return += reward
+          raw_reward = float((info or {}).get('score_reward', reward))
+          episode_raw_return += raw_reward
           if done:
+            logging.info('Return: %f Raw return: %f Steps: %i', episode_return,
+                         episode_raw_return, episode_step)
             with timer_cls('actor/elapsed_env_reset_s', 10):
               observation = env.reset()
+              episode_step = 0
+              episode_return = 0
+              episode_raw_return = 0
           actor_step += 1
       except (tf.errors.UnavailableError, tf.errors.CancelledError) as e:
         logging.exception(e)

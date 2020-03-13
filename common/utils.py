@@ -38,23 +38,21 @@ Settings = collections.namedtuple(
 
 def init_learner(num_training_tpus):
   """Performs common learner initialization."""
-  any_tpu = any(
-      (d for d in tf.config.experimental_list_devices() if ':TPU:' in d))
-  if any_tpu:
+  if tf.config.experimental.list_logical_devices('TPU'):
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver('')
     topology = tf.tpu.experimental.initialize_tpu_system(resolver)
     strategy = tf.distribute.experimental.TPUStrategy(resolver)
-    inference_devices = strategy.extended.worker_devices[num_training_tpus:]
     training_da = tf.tpu.experimental.DeviceAssignment.build(
         topology, num_replicas=num_training_tpus)
     training_strategy = tf.distribute.experimental.TPUStrategy(
         resolver, device_assignment=training_da)
+    inference_devices = list(set(strategy.extended.worker_devices) -
+                             set(training_strategy.extended.worker_devices))
     return Settings(strategy, inference_devices, training_strategy, tpu_encode,
                     tpu_decode)
   else:
     tf.device('/cpu').__enter__()
-    any_gpu = any(
-        (d for d in tf.config.experimental_list_devices() if ':GPU:' in d))
+    any_gpu = tf.config.experimental.list_logical_devices('GPU')
     device_name = '/device:GPU:0' if any_gpu else '/device:CPU:0'
     strategy = tf.distribute.OneDeviceStrategy(device=device_name)
     enc = lambda x: x
@@ -517,6 +515,57 @@ tensor_conversion_registry.register_tensor_conversion_function(
     TPUEncodedUInt8, lambda value, *unused_args, **unused_kwargs: value.encoded)
 
 
+class TPUEncodedF32Spec(tf.TypeSpec):
+  """Type specification for composite tensor TPUEncodedF32Spec."""
+
+  def __init__(self, encoded_shape, original_shape):
+    self._value_specs = (tf.TensorSpec(encoded_shape, tf.float32),)
+    self.original_shape = original_shape
+
+  @property
+  def _component_specs(self):
+    return self._value_specs
+
+  def _to_components(self, value):
+    return (value.encoded,)
+
+  def _from_components(self, components):
+    return TPUEncodedF32(components[0], self.original_shape)
+
+  def _serialize(self):
+    return self._value_specs[0].shape, self.original_shape
+
+  def _to_legacy_output_types(self):
+    return self._value_specs[0].dtype
+
+  def _to_legacy_output_shapes(self):
+    return self._value_specs[0].shape
+
+  @property
+  def value_type(self):
+    assert False
+
+
+class TPUEncodedF32(composite_tensor.CompositeTensor):
+
+  def __init__(self, encoded, shape):
+    self.encoded = encoded
+    self.original_shape = shape
+    self._spec = TPUEncodedF32Spec(encoded.shape, tf.TensorShape(shape))
+
+  @property
+  def _type_spec(self):
+    return self._spec
+
+
+tensor_conversion_registry.register_tensor_conversion_function(
+    TPUEncodedF32, lambda value, *unused_args, **unused_kwargs: value.encoded)
+
+
+def num_divisible(v, m):
+  return sum([1 for x in v if x % m == 0])
+
+
 def tpu_encode(ts):
   """Encodes a nest of Tensors in a suitable way for TPUs.
 
@@ -553,6 +602,11 @@ def tpu_encode(ts):
       return tf.cast(t, tf.bfloat16)
     elif t.dtype == tf.uint16:
       return tf.cast(t, tf.int32)
+    elif (t.dtype == tf.float32 and t.shape.rank > 1 and not
+          (num_divisible(t.shape.dims, 128) >= 1 and
+           num_divisible(t.shape.dims, 8) >= 2)):
+      x = tf.reshape(t, [-1])
+      return TPUEncodedF32(x, t.shape)
     else:
       return t
 
@@ -586,6 +640,10 @@ def tpu_decode(ts, structure=None):
       inverted_shape = np.array(s.original_shape)[np.argsort(perm)]
       x = tf.reshape(x, inverted_shape)
       x = tf.transpose(x, perm)
+      return x
+    elif isinstance(s, TPUEncodedF32):
+      x = t.encoded if isinstance(t, TPUEncodedF32) else t
+      x = tf.reshape(x, s.original_shape)
       return x
     else:
       return t

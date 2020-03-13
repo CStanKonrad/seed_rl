@@ -21,19 +21,21 @@ die () {
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd $DIR
 
-CONFIG=$1
-WORKERS=4
+ENVIRONMENT=$1
+AGENT=$2
+NUM_ACTORS=$3
+shift 3
 
 export PYTHONPATH=$PYTHONPATH:/
 
-ACTOR_BINARY="CUDA_VISIBLE_DEVICES='' python3 ../${CONFIG}/actor.py";
-LEARNER_BINARY="python3 ../${CONFIG}/learner.py";
+ACTOR_BINARY="CUDA_VISIBLE_DEVICES='' python3 ../${ENVIRONMENT}/${AGENT}_main.py --run_mode=actor";
+LEARNER_BINARY="python3 ../${ENVIRONMENT}/${AGENT}_main.py --run_mode=learner";
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 tmux new-session -d -t seed_rl
 mkdir -p /tmp/seed_rl
 cat >/tmp/seed_rl/instructions <<EOF
-Welcome to the SEED local training of ${CONFIG}.
+Welcome to the SEED local training of ${ENVIRONMENT} with ${AGENT}.
 SEED uses tmux for easy navigation between different tasks involved
 in the training process. To switch to a specific task, press CTRL+b, [tab id].
 You can stop training at any time by executing '../stop_local.sh'
@@ -47,13 +49,13 @@ tmux send-keys KPEnter
 tmux send-keys "../stop_local.sh"
 tmux new-window -d -n learner
 
-COMMAND='rm /tmp/agent -Rf; '"${LEARNER_BINARY}"' --logtostderr --pdb_post_mortem '"$@"' --num_actors='"${WORKERS}"''
+COMMAND='rm /tmp/agent -Rf; '"${LEARNER_BINARY}"' --logtostderr --pdb_post_mortem '"$@"' --num_actors='"${NUM_ACTORS}"''
 echo $COMMAND
 tmux send-keys -t "learner" "$COMMAND" ENTER
 
-for ((id=0; id<$WORKERS; id++)); do
+for ((id=0; id<$NUM_ACTORS; id++)); do
     tmux new-window -d -n "actor_${id}"
-    COMMAND=''"${ACTOR_BINARY}"' --logtostderr --pdb_post_mortem '"$@"' --num_actors='"${WORKERS}"' --task='"${id}"''
+    COMMAND=''"${ACTOR_BINARY}"' --logtostderr --pdb_post_mortem '"$@"' --num_actors='"${NUM_ACTORS}"' --task='"${id}"''
     tmux send-keys -t "actor_${id}" "$COMMAND" ENTER
 done
 

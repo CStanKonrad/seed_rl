@@ -24,20 +24,22 @@ from absl import flags
 from seed_rl.agents.vtrace import learner
 from seed_rl.common import actor
 from seed_rl.common import common_flags  
-from seed_rl.dmlab import agents
 from seed_rl.dmlab import env
+from seed_rl.dmlab import networks
 import tensorflow as tf
+
 
 
 FLAGS = flags.FLAGS
 
 # Optimizer settings.
 flags.DEFINE_float('learning_rate', 0.00048, 'Learning rate.')
-flags.DEFINE_float('adam_epsilon', 1e-3, 'Adam epsilon.')
+flags.DEFINE_float('adam_epsilon', 3.125e-7, 'Adam epsilon.')
 
 
-def create_agent(unused_env_output_specs, num_actions):
-  return agents.ImpalaDeep(num_actions)
+def create_agent(action_space, unused_env_observation_space,
+                 unused_parametric_action_distribution):
+  return networks.ImpalaDeep(action_space.n)
 
 
 def create_optimizer(final_iteration):

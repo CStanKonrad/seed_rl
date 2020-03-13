@@ -55,6 +55,25 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
     self.assertAllEqual(43, client.foo(42))
     server.shutdown()
 
+
+
+  @parameterized.parameters(([], False), ([1], True))
+  def test_simple_two_calls(self, dim, batched):
+    address = self.get_unix_address()
+    server = ops.Server([address])
+
+    @tf.function(input_signature=[tf.TensorSpec(dim, tf.int32)])
+    def foo(x):
+      return x + 1
+
+    server.bind(foo, batched=batched)
+    server.start()
+
+    client = ops.Client(address)
+    self.assertAllEqual(43, client.foo(42))
+    self.assertAllEqual(44, client.foo(43))
+    server.shutdown()
+
   def test_empty_input(self):
     address = self.get_unix_address()
     server = ops.Server([address])
@@ -131,9 +150,9 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
     @tf.function(input_signature=[tf.TensorSpec(dim, tf.int32)])
     def foo(x):
       if state[0] is None:
-        with tf.device('/device:GPU:0'):
+        with tf.device('/device:CPU:0'):
           state[0] = tf.Variable(42)
-      with tf.device('/device:GPU:0'):
+      with tf.device('/device:CPU:0'):
         return x + state[0]
 
     server.bind(foo, batched=batched)
@@ -416,8 +435,8 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
     with futures.ThreadPoolExecutor(max_workers=1) as executor:
       f = executor.submit(client.foo, 42)
       is_waiting.wait()
+      server.shutdown()
       with self.assertRaisesRegexp(tf.errors.UnavailableError, 'server closed'):
-        server.shutdown()
         f.result()
 
   @parameterized.parameters(([], False), ([1], True))
@@ -441,8 +460,8 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
     with futures.ThreadPoolExecutor(max_workers=1) as executor:
       f = executor.submit(client.foo, 42)
       q.dequeue()  # Wait for function to be called.
+      server.shutdown()
       try:
-        server.shutdown()
         f.result()
         # Non-deterministic if server manage to send CancelledError before
         # shutting down or not.
@@ -592,8 +611,8 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
     with futures.ThreadPoolExecutor(max_workers=1) as executor:
       f = executor.submit(client.foo, 42)
       time.sleep(1)
+      server.shutdown()
       with self.assertRaisesRegexp(tf.errors.UnavailableError, 'server closed'):
-        server.shutdown()
         f.result()
 
   @parameterized.parameters(([], False), ([1], True), ([2], True))
@@ -726,12 +745,12 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
     address = self.get_unix_address()
     server = ops.Server([address])
 
-    with tf.device('/device:GPU:0'):
+    with tf.device('/device:CPU:0'):
       a = tf.Variable(1)
 
     @tf.function(input_signature=[tf.TensorSpec(dim, tf.int32)])
     def foo(x):
-      with tf.device('/device:GPU:0'):
+      with tf.device('/device:CPU:0'):
         b = a + 1
         c = x + 1
       return x + b, c
@@ -750,10 +769,10 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
     address = self.get_unix_address()
     server = ops.Server([address])
 
-    with tf.device('/device:GPU:0'):
+    with tf.device('/device:CPU:0'):
       a = tf.Variable(1)
 
-    with tf.device('/device:GPU:0'):
+    with tf.device('/device:CPU:0'):
 
       @tf.function
       def get_a_plus_one():
@@ -761,7 +780,7 @@ class OpsTest(tf.test.TestCase, parameterized.TestCase):
 
     @tf.function(input_signature=[tf.TensorSpec(dim, tf.int32)])
     def foo(x):
-      with tf.device('/device:GPU:0'):
+      with tf.device('/device:CPU:0'):
         b = x + get_a_plus_one()
       return b + 1
 

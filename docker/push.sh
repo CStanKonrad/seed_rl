@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+# Pushes docker image seed_rl:$LABEL to the URI $IMAGE_URI:$LABEL.
+
 set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd $DIR
