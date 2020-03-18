@@ -24,6 +24,9 @@ from seed_rl.common import actor
 from seed_rl.common import common_flags  
 from seed_rl.football import env
 from seed_rl.football import networks
+from seed_rl.football.networks.gfootball import create_network as GFootball
+from seed_rl.football.networks.gfootball_lstm import create_network as GFootballLSTM
+from seed_rl.football.networks.gfootball_lite import create_network as GFootballLite
 import tensorflow as tf
 
 
@@ -33,10 +36,24 @@ FLAGS = flags.FLAGS
 # Optimizer settings.
 flags.DEFINE_float('learning_rate', 0.00048, 'Learning rate.')
 
+KNOWN_NETWORKS = {
+  'GFootball': GFootball,
+  'GFootballLSTM': GFootballLSTM,
+  'GFootballLite': GFootballLite,
+}
 
-def create_agent(action_space, unused_env_observation_space,
-                 unused_parametric_action_distribution):
-  return networks.GFootball(action_space.nvec)
+
+def create_agent(action_space, env_observation_space,
+                 parametric_action_distribution, extended_network_config={}):
+  network_config = extended_network_config.copy()
+  network_config['action_space'] = action_space
+  network_config['env_observation_space'] = env_observation_space
+  network_config['parametric_action_distribution'] = parametric_action_distribution
+
+  network_name = network_config['network_name'] if 'network_name' in network_config else 'GFootball'
+
+
+  return KNOWN_NETWORKS[network_name](network_config)
 
 
 def create_optimizer(unused_final_iteration):

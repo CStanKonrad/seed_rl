@@ -14,14 +14,12 @@
 
 """SEED agent using Keras."""
 
-import collections
 from seed_rl.football import observation
 import tensorflow as tf
 from seed_rl.common import utils
 import numpy as np
 
-AgentOutput = collections.namedtuple('AgentOutput',
-                                     'action policy_logits baseline')
+from .base_vtrace_network import AgentOutput, BaseVTraceNetwork
 
 
 class _Stack(tf.Module):
@@ -122,6 +120,11 @@ class GFootball(tf.Module):
     self._conv_to_linear = tf.keras.layers.Dense(
       256, kernel_initializer='lecun_normal')
 
+    self._core = tf.keras.layers.StackedRNNCells(
+      [tf.keras.layers.LSTMCell(256) for _ in range(3)])
+    self._mlp_after_lstm = tf.keras.Sequential([tf.keras.layers.Dense(
+      256, "relu", kernel_initializer="lecun_normal") for _ in range(3)])
+
     # Layers for _head.
     self._policy_logits = make_logits(
       lambda num_units, name: tf.keras.layers.Dense(
@@ -134,7 +137,7 @@ class GFootball(tf.Module):
       1, name='baseline', kernel_initializer='lecun_normal')
 
   def initial_state(self, batch_size):
-    return ()
+    return self._core.get_initial_state(batch_size=batch_size, dtype=tf.float32)
 
   def change_config(self, new_config):
     self._config = new_config
@@ -170,8 +173,33 @@ class GFootball(tf.Module):
   def __call__(self, input_, core_state, unroll, is_training):
     prev_actions, env_outputs = input_
     outputs, core_state = self._unroll(prev_actions, env_outputs, core_state)
+
     return outputs, core_state
 
   def _unroll(self, prev_actions, env_outputs, core_state):
-    torso_outputs = utils.batch_apply(self._torso, (prev_actions, env_outputs))
-    return utils.batch_apply(self._head, (torso_outputs,)), core_state
+    _, done, frame = env_outputs
+    torso_outputs = utils.batch_apply(
+      self._torso, (prev_actions, env_outputs))
+
+    initial_core_state = self._core.get_initial_state(
+      batch_size=tf.shape(torso_outputs)[1], dtype=tf.float32)
+    core_output_list = []
+    for input_, d in zip(tf.unstack(torso_outputs), tf.unstack(done)):
+      # If the episode ended, the core state should be reset before the next.
+      core_state = tf.nest.map_structure(
+        lambda x, y, d=d: tf.where(
+          tf.reshape(d, [d.shape[0]] + [1] * (x.shape.rank - 1)), x, y),
+        initial_core_state,
+        core_state)
+      core_output, core_state = self._core(input_, core_state)
+      core_output = self._mlp_after_lstm(core_output)
+      core_output_list.append(core_output)
+    outputs = tf.stack(core_output_list)
+
+    return utils.batch_apply(self._head, (outputs,)), core_state
+
+
+def create_network(network_config):
+  net = GFootball(network_config['action_space'].nvec)
+  net.change_config(network_config)
+  return net
