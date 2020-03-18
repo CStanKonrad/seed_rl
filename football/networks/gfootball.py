@@ -97,7 +97,7 @@ def choose_action(action_specs, policy_logits, sample=True):
   return new_action
 
 
-class GFootball(tf.Module):
+class GFootball(BaseVTraceNetwork):
   """Agent with ResNet, but without LSTM and additional inputs.
 
   Four blocks instead of three in ImpalaAtariDeep.

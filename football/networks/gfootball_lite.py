@@ -61,7 +61,7 @@ class _Stack(tf.Module):
     return conv_out
 
 
-class GFootball(tf.Module):
+class GFootball(BaseVTraceNetwork):
   """Agent with ResNet, but without LSTM and additional inputs.
 
   Four blocks instead of three in ImpalaAtariDeep.
