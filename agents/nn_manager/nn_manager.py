@@ -153,12 +153,9 @@ class NNManager():
     if (len(self._network_config) == 1) and (self._num_networks != 1):
       self._network_config = [self._network_config[0]] * self._num_networks
 
-    self._network = [create_agent_fn(self._network_action_space[i], (), self._network_action_distribution[i]) for i in
+    self._network = [create_agent_fn(self._network_action_space[i], (), self._network_action_distribution[i],
+                                     extended_network_config=self._network_config[i]) for i in
                      range(self._num_networks)]  # todo change () to proper observation_space priority: low
-
-    for i in range(self._num_networks):
-      if hasattr(self._network[i], 'change_config'):
-        self._network[i].change_config(self._network_config[i])
 
     # by default iteration number is picked from  optimizer of the first network
     # if the first network is not updated then NNManager handles iterations manually

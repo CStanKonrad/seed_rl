@@ -14,14 +14,12 @@
 
 """SEED agent using Keras."""
 
-import collections
 from seed_rl.football import observation
 import tensorflow as tf
 from seed_rl.common import utils
 import numpy as np
 
-AgentOutput = collections.namedtuple('AgentOutput',
-                                     'action policy_logits baseline')
+from .base_vtrace_network import AgentOutput, BaseVTraceNetwork
 
 
 class _Stack(tf.Module):
@@ -199,3 +197,9 @@ class GFootball(tf.Module):
     outputs = tf.stack(core_output_list)
 
     return utils.batch_apply(self._head, (outputs,)), core_state
+
+
+def create_network(network_config):
+  net = GFootball(network_config['action_space'].nvec)
+  net.change_config(network_config)
+  return net
