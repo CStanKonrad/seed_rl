@@ -42,5 +42,6 @@ def create_environment(_, env_logdir='', actor_id=None):
   else:
       config['base_logdir'] = None
       config['actor_id'] = None
+  # todo move PackedBitsObservation somewhere else
   return observation.PackedBitsObservation(
     gym.make('gfootball_zpp:gfootball-custom-v1', **config))
