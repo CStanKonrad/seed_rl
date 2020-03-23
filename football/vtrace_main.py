@@ -18,6 +18,7 @@
 
 from absl import app
 from absl import flags
+from absl import logging
 
 from seed_rl.agents.vtrace import learner
 from seed_rl.common import actor
@@ -51,6 +52,9 @@ def create_agent(action_space, env_observation_space,
   network_config['parametric_action_distribution'] = parametric_action_distribution
 
   network_name = network_config['network_name'] if 'network_name' in network_config else 'GFootball'
+  logging.warning('WARNING: NO NETWORK NAME PROVIDED, DEFAULT WILL BE USED')
+
+  logging.info('Creating network %s with parameters: %s', network_name, str(network_config))
 
 
   return KNOWN_NETWORKS[network_name](network_config)
