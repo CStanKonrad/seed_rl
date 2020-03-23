@@ -47,7 +47,7 @@ def actor_loop(create_env_fn):
       newly created environment.
   """
   logging.info('Starting actor loop')
-  main_logdir = os.path.join(FLAGS.logdir, 'actor_{}'.format(FLAGS.task))
+  main_logdir = os.path.join(FLAGS.logdir, 'actors', 'actor_{}'.format(FLAGS.task))
   env_logdir = main_logdir
   if are_summaries_enabled():
     summary_writer = tf.summary.create_file_writer(
