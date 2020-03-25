@@ -347,6 +347,10 @@ class NNManager():
       output = tf.nest.map_structure(lambda t: tf.squeeze(t, 0), output)
     return output
 
+  @tf.function
+  def get_action(self, *args, **kwargs):
+    return self.__call__(*args, **kwargs)
+
   def __call__(self, prev_actions, env_outputs, core_state, unroll=False, is_training=False,
                postprocess_action=True):
     input_ = self._prepare_input((prev_actions, env_outputs), unroll)
