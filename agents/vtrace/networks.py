@@ -48,6 +48,7 @@ class MLPandLSTM(tf.Module):
         parametric_action_distribution.param_size, name='policy_logits')
     self._baseline = tf.keras.layers.Dense(1, name='baseline')
 
+  @tf.function
   def initial_state(self, batch_size):
     return self._core.get_initial_state(batch_size=batch_size, dtype=tf.float32)
 
@@ -60,21 +61,50 @@ class MLPandLSTM(tf.Module):
 
     return AgentOutput(action, policy_logits, baseline)
 
-  def __call__(self, input_, core_state, unroll=False,
-               is_training=False):
+  # Not clear why, but if "@tf.function" declarator is placed directly onto
+  # __call__, training fails with "uninitialized variable *baseline".
+  # when running on multiple learning tpu cores.
+
+
+  @tf.function
+  def get_action(self, *args, **kwargs):
+    return self.__call__(*args, **kwargs)
+
+  def __call__(self, prev_actions, env_outputs, core_state, unroll=False,
+               is_training=False, postprocess_action=True):
+    """Runs the agent.
+
+    Args:
+      prev_actions: Previous action (after postprocessing). Not used by this
+        agent.
+      env_outputs: Structure with reward, done and observation fields. Only
+        observation field is used by this agent. It should have the shape
+        [time, batch_size, observation_size].
+      core_state: Agent state.
+      unroll: Should be True if inputs contain the time dimension and False
+        otherwise.
+      is_training: Whether we are in the loss computation. Not used by this
+        agent.
+      postprocess_action: Whether the action should be postprocessed (e.g. by
+        applying tanh).
+    Returns:
+      A structure with action, policy_logits and baseline.
+    """
     if not unroll:
       # Add time dimension.
-      input_ = tf.nest.map_structure(lambda t: tf.expand_dims(t, 0), input_)
-    prev_actions, env_outputs = input_
+      prev_actions, env_outputs = tf.nest.map_structure(
+          lambda t: tf.expand_dims(t, 0), (prev_actions, env_outputs))
+
     outputs, core_state = self._unroll(prev_actions, env_outputs, core_state)
+
     if not unroll:
       # Remove time dimension.
       outputs = tf.nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
 
-    if not is_training:
-      outputs = AgentOutput(
-          self._parametric_action_distribution.postprocess(outputs.action),
-          outputs.policy_logits, outputs.baseline)
+    if postprocess_action:
+      outputs = outputs._replace(
+          action=self._parametric_action_distribution.postprocess(
+              outputs.action))
 
     return outputs, core_state
 
