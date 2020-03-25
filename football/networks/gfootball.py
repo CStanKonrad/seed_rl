@@ -131,6 +131,7 @@ class GFootball(BaseVTraceNetwork):
     self._baseline = tf.keras.layers.Dense(
       1, name='baseline', kernel_initializer='lecun_normal')
 
+  @tf.function
   def initial_state(self, batch_size):
     return ()
 
@@ -164,6 +165,10 @@ class GFootball(BaseVTraceNetwork):
     new_action = choose_action(self._action_specs, policy_logits, self._config['sample_actions'])
 
     return AgentOutput(new_action, post_process_logits(self._action_specs, policy_logits), baseline)
+
+  @tf.function
+  def get_action(self, *args, **kwargs):
+    return self.__call__(*args, **kwargs)
 
   def __call__(self, prev_actions, env_outputs, core_state, unroll,
                is_training, postprocess_action):

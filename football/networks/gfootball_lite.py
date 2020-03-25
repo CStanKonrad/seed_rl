@@ -90,6 +90,7 @@ class GFootball(BaseVTraceNetwork):
     self._baseline = tf.keras.layers.Dense(
       1, name='baseline', kernel_initializer='lecun_normal')
 
+  @tf.function
   def initial_state(self, batch_size):
     return ()
 
