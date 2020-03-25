@@ -29,6 +29,7 @@ from seed_rl.football.networks.gfootball import create_network as GFootball
 from seed_rl.football.networks.gfootball_lstm import create_network as GFootballLSTM
 from seed_rl.football.networks.gfootball_lite import create_network as GFootballLite
 from seed_rl.football.networks.vtrace_mlp_and_lstm import create_network as VtraceMLPandLSTM
+from seed_rl.football.networks.gfootball_flex import create_network as GFootballFlex
 import tensorflow as tf
 
 
@@ -42,6 +43,7 @@ KNOWN_NETWORKS = {
   'GFootball': GFootball,
   'GFootballLSTM': GFootballLSTM,
   'GFootballLite': GFootballLite,
+  'GFootballFlex': GFootballFlex,
   'VtraceMLPandLSTM': VtraceMLPandLSTM
 }
 
