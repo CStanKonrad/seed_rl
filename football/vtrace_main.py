@@ -51,11 +51,13 @@ def create_agent(action_space, env_observation_space,
   network_config['env_observation_space'] = env_observation_space
   network_config['parametric_action_distribution'] = parametric_action_distribution
 
-  network_name = network_config['network_name'] if 'network_name' in network_config else 'GFootball'
-  logging.warning('WARNING: NO NETWORK NAME PROVIDED, DEFAULT WILL BE USED')
+  if 'network_name' in network_config:
+    network_name = network_config['network_name']
+  else:
+    network_name = 'GFootball'
+    logging.warning('WARNING: NO NETWORK NAME PROVIDED, DEFAULT WILL BE USED')
 
   logging.info('Creating network %s with parameters: %s', network_name, str(network_config))
-
 
   return KNOWN_NETWORKS[network_name](network_config)
 
