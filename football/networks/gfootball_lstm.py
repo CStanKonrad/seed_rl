@@ -170,8 +170,8 @@ class GFootball(BaseVTraceNetwork):
 
     return AgentOutput(new_action, post_process_logits(self._action_specs, policy_logits), baseline)
 
-  def __call__(self, input_, core_state, unroll, is_training):
-    prev_actions, env_outputs = input_
+  def __call__(self, prev_actions, env_outputs, core_state, unroll,
+               is_training, postprocess_action):
     outputs, core_state = self._unroll(prev_actions, env_outputs, core_state)
 
     return outputs, core_state

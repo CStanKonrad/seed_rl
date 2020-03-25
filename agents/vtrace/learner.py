@@ -51,7 +51,7 @@ flags.DEFINE_string('init_checkpoint', None,
 # Loss settings.
 flags.DEFINE_float('entropy_cost', 0.00025, 'Entropy cost/multiplier.')
 flags.DEFINE_float('target_entropy', None, 'If not None, the entropy cost is '
-                   'automatically adjusted to reach the desired entropy level.')
+                   'automatically adjusted to reach the desired entropy level.') # todo integrate with multiple different nets setup
 flags.DEFINE_float('entropy_cost_adjustment_speed', 10., 'Controls how fast '
                    'the entropy cost coefficient is adjusted.')
 flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
@@ -137,10 +137,10 @@ def compute_loss(logger, parametric_action_distribution, agent, agent_state,
   else:
     entropy_adjustment_loss = 0. * agent.entropy_cost()  # to avoid None in grad
 
-  # total_loss = agent.vtrace_adjust_loss(total_loss) todo delete
-
   total_loss = (policy_loss + v_loss + entropy_loss + kl_loss +
                 entropy_adjustment_loss)
+
+  total_loss = agent.vtrace_adjust_loss(total_loss) # todo think of  deletion in future
 
   # value function
   session = logger.log_session()
