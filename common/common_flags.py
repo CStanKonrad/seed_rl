@@ -31,6 +31,13 @@ flags.DEFINE_enum(
     'play. A learner performs policy inference for batches of observations '
     'coming from multiple actors, and use the generated trajectories to learn.')
 
+
 flags.DEFINE_string('nnm_config',
                     '{"network_actions_spec": [[0, 4], [4, 8]], "observation_to_network_mapping": [0, 1], "network_learning": [true, true], "network_config": [{"sample_actions": true}]}',
                     'Neural Network Manager config')
+
+flags.DEFINE_integer('num_actors', 4,
+                     'Total number of actors (training and eval actors).')
+flags.DEFINE_integer('num_eval_actors', 0,
+                     'Number of actors that will be used for eval (for agents '
+                     'that support eval actors). Must be less than num_actors.')
