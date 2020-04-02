@@ -163,7 +163,8 @@ class NNManager(tf.Module):
 
     # by default iteration number is picked from  optimizer of the first network
     # if the first network is not updated then NNManager handles iterations manually
-    self._handle_iterations_manually = not self._network_learning[0]
+    handle_iterations_manually = config['handle_iterations_manually'] if 'handle_iterations_manually' in config else False
+    self._handle_iterations_manually = (not self._network_learning[0]) or handle_iterations_manually
     self._iterations = tf.Variable(0, dtype=tf.int64)
 
     self._logdir = logdir
