@@ -190,6 +190,7 @@ class NNManager(tf.Module):
     logging.info('NNManager: networks configs : %s', str(self._network_config))
     logging.info('NNManager: single agent : %s', str(self._single_agent))
 
+
   def get_number_of_agents(self):
     return len(self._observation_to_network_mapping)
 
@@ -284,7 +285,7 @@ class NNManager(tf.Module):
     save_dir = os.path.join(self._logdir, 'model', 'nn_manager')
     tf.io.gfile.makedirs(save_dir)
 
-    file_list = tf.io.gfile.listdir(save_dir)
+    file_list = list(map(lambda x: x[:-1], tf.io.gfile.listdir(save_dir)))
     file_list.append("-1")
     max_file_number = max(map(int, file_list))
 
@@ -293,17 +294,15 @@ class NNManager(tf.Module):
 
     self._last_manager_save_time = time_stamp
 
-    logging.info("SAVING %s", self._logdir)
-
   def _save_model_data_for_network(self, network_id):
     time_stamp = time.time()
     self._manager[network_id].save()
-    tf.saved_model.save(self._network[network_id], os.path.join(self._logdir, 'model', str(network_id), os.path.split(
-      self._manager[network_id].latest_checkpoint)[1]))
+    model_file = os.path.split(self._manager[network_id].latest_checkpoint)[1][len('ckpt-'):]
+    tf.saved_model.save(self._network[network_id], os.path.join(self._logdir, 'model', str(network_id),
+      model_file))
     self._last_ckpt_time[network_id] = int(time_stamp)
 
   def manage_models_data(self):
-    logging.info("SAVING")
     current_time = time.time()
     for i in range(self._num_networks):
       if (self._network_learning[i]) and (current_time - self._last_ckpt_time[i] >= self._save_checkpoint_secs):
