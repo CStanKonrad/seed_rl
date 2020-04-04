@@ -9,6 +9,7 @@ from seed_rl.common.parametric_distribution import ParametricDistribution, get_p
 import numpy as np
 import json
 import os
+import re
 
 import tensorflow_probability as tfp
 
@@ -17,6 +18,11 @@ tfd = tfp.distributions
 
 AgentOutput = collections.namedtuple('AgentOutput',
                                      'action policy_logits baseline')
+
+
+def extract_number_from_txt(txt):
+  m = re.search("[0-9]+", txt)
+  return int(txt[m.start():m.end()])
 
 
 def prefix_permute(tensor, prefix_permutation):
@@ -286,12 +292,12 @@ class NNManager(tf.Module):
     save_dir = os.path.join(self._logdir, 'model', 'nn_manager')
     tf.io.gfile.makedirs(save_dir)
 
-    file_list = list(map(lambda x: x[:-1], tf.io.gfile.listdir(save_dir)))
-    file_list.append("-1")
-    max_file_number = max(map(int, file_list))
+    file_list = list(map(extract_number_from_txt, tf.io.gfile.listdir(save_dir)))
+    file_list.append(-1)
+    max_file_number = max(file_list)
 
     current_file_number = max_file_number + 1
-    tf.saved_model.save(self, os.path.join(self._logdir, 'model', 'nn_manager', str(current_file_number)))
+    tf.saved_model.save(self, os.path.join(save_dir, str(current_file_number)))
 
     self._last_manager_save_time = time_stamp
 
