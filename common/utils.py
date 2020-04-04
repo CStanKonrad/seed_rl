@@ -470,17 +470,22 @@ class ProgressLogger(object):
 
   def log(self, session, name, value):
     # this is a python op so it happens only when this tf.function is compiled
-    self.log_keys.append(name)
+    # old code caused duplicates when more than one replica in sync this is a temporal solution
+    if name not in self.log_keys:
+      self.log_keys.append(name)
+
     # this is a TF op.
     session.append(value)
 
   def step_end(self, session, strategy=None, step_increment=1):
     logs = []
+    # logging.info('####Session: %s', str(session))
     for value in session:
       if strategy:
         value = tf.reduce_mean(tf.cast(
             strategy.experimental_local_results(value)[0], tf.float32))
       logs.append(value)
+    # logging.info('####Logs: %s', str(logs))
     self.ready_values.assign(logs)
     self.step_cnt.assign_add(step_increment)
 

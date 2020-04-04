@@ -265,6 +265,8 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     loss, logs = training_strategy.experimental_run_v2(compute_gradients,
                                                        (data,))
 
+    logs = training_strategy.experimental_local_results(logs)[0]
+
     agent.post_optimize()
 
     try:
@@ -414,7 +416,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   it = iter(dataset)
 
   def additional_logs():
-    agent.write_summaries()
     n_episodes = info_queue.size()
     n_episodes -= n_episodes % FLAGS.log_episode_frequency
     if tf.not_equal(n_episodes, 0):
@@ -428,7 +429,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
           tf.summary.scalar(key, tf.reduce_mean(value))
 
       for (frames, ep_return, raw_return) in zip(*episode_stats):
-        logging.info('Return: %f Raw return: %f Frames: %i', ep_return,
+        logging.info('Return: %s Raw return: %f Frames: %i', ep_return.numpy(),
                      raw_return, frames)
 
   logger.start(additional_logs)
