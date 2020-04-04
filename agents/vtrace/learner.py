@@ -205,7 +205,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   agent_input_specs = (action_specs, env_output_specs)
 
   # Initialize agent and variables.
-  agent = NNManager(create_agent_fn, env_output_specs, env.action_space, FLAGS.logdir, FLAGS.save_checkpoint_secs, FLAGS.nnm_config)
+  agent = NNManager(create_agent_fn, env_output_specs, env.action_space, FLAGS.logdir, FLAGS.save_checkpoint_secs, FLAGS.nnm_config, env.observation_space)
   parametric_action_distribution = agent.get_action_space_distribution()
 
   initial_agent_state = agent.initial_state(1)
@@ -214,6 +214,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
   input_ = tf.nest.map_structure(
       lambda s: tf.zeros([1] + list(s.shape), s.dtype), agent_input_specs)
   input_ = encode(input_)
+
 
   with strategy.scope():
     @tf.function
@@ -255,7 +256,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
                                   *args)
         loss = loss * (1.0 / num_replicas_in_sync) # average among replicas (simulates bigger batch)
 
-      grads = tape.gradient(loss, agent.trainable_variables)
+      grads = tape.gradient(loss, agent.get_networks_trainable_variables())
 
       agent.optimize(grads)
 

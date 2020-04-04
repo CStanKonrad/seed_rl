@@ -9,6 +9,7 @@ from seed_rl.common.parametric_distribution import ParametricDistribution, get_p
 import numpy as np
 import json
 import os
+import re
 
 import tensorflow_probability as tfp
 
@@ -17,6 +18,11 @@ tfd = tfp.distributions
 
 AgentOutput = collections.namedtuple('AgentOutput',
                                      'action policy_logits baseline')
+
+
+def extract_number_from_txt(txt):
+  m = re.search("[0-9]+", txt)
+  return int(txt[m.start():m.end()])
 
 
 def prefix_permute(tensor, prefix_permutation):
@@ -127,11 +133,15 @@ def support_legacy_config(config):
   return config
 
 
-class NNManager():
+class NNManager(tf.Module):
   def __init__(self, create_agent_fn, env_output_specs, action_space, logdir, save_checkpoint_secs, config,
-               observation_space=()):
+               observation_space):
+    super(NNManager, self).__init__(name=None)
+
     config = decode_string_config(config)
     config = support_legacy_config(config)
+
+    self._original_observation_space = observation_space
 
     self._original_action_space = action_space
 
@@ -159,7 +169,8 @@ class NNManager():
 
     # by default iteration number is picked from  optimizer of the first network
     # if the first network is not updated then NNManager handles iterations manually
-    self._handle_iterations_manually = not self._network_learning[0]
+    handle_iterations_manually = config['handle_iterations_manually'] if 'handle_iterations_manually' in config else False
+    self._handle_iterations_manually = (not self._network_learning[0]) or handle_iterations_manually
     self._iterations = tf.Variable(0, dtype=tf.int64)
 
     self._logdir = logdir
@@ -168,8 +179,9 @@ class NNManager():
     self._ckpt = None
     self._manager = None
     self._last_ckpt_time = [0] * self._num_networks
+    self._last_manager_save_time = 0
 
-    self.trainable_variables = None
+    self._networks_trainable_variables = None
 
     self._optimizers = None
     self._learning_rate_fn = None
@@ -185,8 +197,13 @@ class NNManager():
     logging.info('NNManager: networks configs : %s', str(self._network_config))
     logging.info('NNManager: single agent : %s', str(self._single_agent))
 
+
   def get_number_of_agents(self):
     return len(self._observation_to_network_mapping)
+
+  @tf.function
+  def get_observation_shape(self):
+    return tf.convert_to_tensor(self._original_observation_space.shape)
 
   def get_action_space_distribution(self):
     original_distribution = get_parametric_distribution_for_action_space(self._original_action_space)
@@ -200,11 +217,14 @@ class NNManager():
     return NNMDistributionWrapper(original_distribution, action_log_probs_grouping)
 
   def create_trainable_variables(self):
-    self.trainable_variables = []
+    self._networks_trainable_variables = []
     for i in range(self._num_networks):
       if self._network_learning[i]:
-        self.trainable_variables.extend(self._network[i].trainable_variables)
-    self.trainable_variables = tuple(self.trainable_variables)
+        self._networks_trainable_variables.extend(self._network[i].trainable_variables)
+    self._networks_trainable_variables = tuple(self._networks_trainable_variables)
+
+  def get_networks_trainable_variables(self):
+    return self._networks_trainable_variables
 
   def get_action_groups(self):  # todo asserts
     groups = []
@@ -245,6 +265,7 @@ class NNManager():
     if self._handle_iterations_manually:
       self._iterations.assign(self._iterations + 1)
 
+  @tf.function
   def initial_state(self, batch_size):  # todo check
     result_state = []
     for net_num in self._observation_to_network_mapping:
@@ -265,11 +286,27 @@ class NNManager():
         self._ckpt[i].restore(self._manager[i].latest_checkpoint).assert_consumed()
         self._last_ckpt_time[i] = int(current_time)
 
+  def _save_nn_manager(self):
+    time_stamp = time.time()
+
+    save_dir = os.path.join(self._logdir, 'model', 'nn_manager')
+    tf.io.gfile.makedirs(save_dir)
+
+    file_list = list(map(extract_number_from_txt, tf.io.gfile.listdir(save_dir)))
+    file_list.append(-1)
+    max_file_number = max(file_list)
+
+    current_file_number = max_file_number + 1
+    tf.saved_model.save(self, os.path.join(save_dir, str(current_file_number)))
+
+    self._last_manager_save_time = time_stamp
+
   def _save_model_data_for_network(self, network_id):
     time_stamp = time.time()
     self._manager[network_id].save()
-    tf.saved_model.save(self._network[network_id], os.path.join(self._logdir, 'model', str(network_id), os.path.split(
-      self._manager[network_id].latest_checkpoint)[1]))
+    model_file = os.path.split(self._manager[network_id].latest_checkpoint)[1][len('ckpt-'):]
+    tf.saved_model.save(self._network[network_id], os.path.join(self._logdir, 'model', str(network_id),
+      model_file))
     self._last_ckpt_time[network_id] = int(time_stamp)
 
   def manage_models_data(self):
@@ -277,6 +314,9 @@ class NNManager():
     for i in range(self._num_networks):
       if (self._network_learning[i]) and (current_time - self._last_ckpt_time[i] >= self._save_checkpoint_secs):
         self._save_model_data_for_network(i)
+
+    if current_time - self._last_manager_save_time > self._save_checkpoint_secs:
+      self._save_nn_manager()
 
   def save(self):
     for i in range(self._num_networks):

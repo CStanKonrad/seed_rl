@@ -33,7 +33,7 @@ flags.DEFINE_enum(
 
 
 flags.DEFINE_string('nnm_config',
-                    '{"network_actions_spec": [[0, 4], [4, 8]], "observation_to_network_mapping": [0, 1], "network_learning": [true, true], "network_config": [{"sample_actions": true}]}',
+                    '{"network_actions_spec": [[0, 4], [4, 8]], "observation_to_network_mapping": [0, 1], "network_learning": [true, true], "network_config": [{"sample_actions": true}], "handle_iterations_manually": False}',
                     'Neural Network Manager config')
 
 flags.DEFINE_integer('num_actors', 4,
