@@ -265,8 +265,6 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
     loss, logs = training_strategy.experimental_run_v2(compute_gradients,
                                                        (data,))
 
-    logs = training_strategy.experimental_local_results(logs)
-
     agent.post_optimize()
 
     try:
