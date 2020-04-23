@@ -322,6 +322,7 @@ class NNManager(tf.Module):
     for i in range(self._num_networks):
       if self._network_learning[i]:
         self._save_model_data_for_network(i)
+    self._save_nn_manager()
 
   def adjust_discounts(self, discounts):
     # logging.info('discounts before %s', str(discounts))
