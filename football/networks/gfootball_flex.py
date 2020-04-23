@@ -66,6 +66,21 @@ def make_logits(layer_fn, action_specs):
   return [layer_fn(n, 'policy_logits') for n in action_specs]
 
 
+def make_heads(action_specs, heads_specs):
+  def make_head(action_spec, head_spec):
+    mlp_layers = [tf.keras.layers.Dense(
+      size, "relu", kernel_initializer="lecun_normal") for size in head_spec['mlp_sizes']]
+    action_layer = tf.keras.layers.Dense(action_spec, name='policy_logits', kernel_initializer='lecun_normal')
+    return tf.keras.Sequential(mlp_layers + [action_layer])
+  result = []
+  if len(heads_specs) == 1:
+    heads_specs = heads_specs * len(action_specs)
+  for action_s, head_s in zip(action_specs, heads_specs):
+    print("making head:")
+    print(action_s, ":", head_s)
+    result.append(make_head(action_s, head_s))
+  return result
+
 def apply_net(action_specs, policy_logits, core_output):
   n_actions = len(action_specs)
   arr = [policy_logits[i](core_output) for i in range(n_actions)]
@@ -103,7 +118,7 @@ class GFootball(BaseVTraceNetwork):
   Four blocks instead of three in ImpalaAtariDeep.
   """
 
-  def __init__(self, action_specs, mlp_sizes, lstm_sizes, sample_actions):
+  def __init__(self, action_specs, mlp_sizes, lstm_sizes, heads_specs, baseline_specs, sample_actions):
     super(GFootball, self).__init__(name='gfootball')
 
     self._config = {'sample_actions': sample_actions}
@@ -111,6 +126,8 @@ class GFootball(BaseVTraceNetwork):
     # Parameters and layers for unroll.
 
     self._action_specs = action_specs
+
+    self._separate_baseline = baseline_specs['separate']
 
     # Parameters and layers for _torso.
     self._stacks = [
@@ -126,15 +143,22 @@ class GFootball(BaseVTraceNetwork):
       size, "relu", kernel_initializer="lecun_normal") for size in mlp_sizes])
 
     # Layers for _head.
-    self._policy_logits = make_logits(
-      lambda num_units, name: tf.keras.layers.Dense(
-        num_units,
-        name=name,
-        kernel_initializer='lecun_normal'),
-      self._action_specs)
+    self._policy_logits = make_heads(self._action_specs, heads_specs)
 
-    self._baseline = tf.keras.layers.Dense(
-      1, name='baseline', kernel_initializer='lecun_normal')
+    self._baseline = tf.keras.Sequential(
+      [tf.keras.layers.Dense(size, "relu", kernel_initializer="lecun_normal") for size in baseline_specs['mlp_sizes']] + \
+      [tf.keras.layers.Dense(1, name='baseline', kernel_initializer='lecun_normal')]
+    )
+
+    if self._separate_baseline:
+      self._baseline_stacks = [
+        _Stack(num_ch, num_blocks)
+        for num_ch, num_blocks in [(16, 2), (32, 2), (32, 2), (32, 2)]
+      ]
+      self._baseline_conv_to_linear = tf.keras.layers.Dense(
+        256,
+        kernel_initializer='lecun_normal')
+
 
   @tf.function
   def initial_state(self, batch_size):
@@ -147,6 +171,7 @@ class GFootball(BaseVTraceNetwork):
     frame /= 255
 
     conv_out = frame
+
     for stack in self._stacks:
       conv_out = stack(conv_out)
 
@@ -154,14 +179,33 @@ class GFootball(BaseVTraceNetwork):
     conv_out = tf.keras.layers.Flatten()(conv_out)
 
     conv_out = self._conv_to_linear(conv_out)
-    return tf.nn.relu(conv_out)
 
-  def _head(self, core_output):
+    conv_out = tf.nn.relu(conv_out)
+
+    if self._separate_baseline:
+      conv_out_baseline = frame
+
+      for stack in self._baseline_stacks:
+        conv_out_baseline = stack(conv_out_baseline)
+
+      conv_out_baseline = tf.nn.relu(conv_out_baseline)
+      conv_out_baseline = tf.keras.layers.Flatten()(conv_out_baseline)
+
+      conv_out_baseline = self._baseline_conv_to_linear(conv_out_baseline)
+
+      conv_out_baseline = tf.nn.relu(conv_out_baseline)
+    else:
+      conv_out_baseline = conv_out
+
+    return conv_out, conv_out_baseline
+
+  def _head(self, core_output_tuple):
+    core_output_policy, core_output_baseline = core_output_tuple
     policy_logits = apply_net(
       self._action_specs,
       self._policy_logits,
-      core_output)
-    baseline = tf.squeeze(self._baseline(core_output), axis=-1)
+      core_output_policy)
+    baseline = tf.squeeze(self._baseline(core_output_baseline), axis=-1)
 
     # Sample an action from the policy.
     new_action = choose_action(self._action_specs, policy_logits, self._config['sample_actions'])
@@ -180,13 +224,13 @@ class GFootball(BaseVTraceNetwork):
 
   def _unroll(self, prev_actions, env_outputs, core_state):
     _, done, frame = env_outputs
-    torso_outputs = utils.batch_apply(
+    torso_outputs_policy, torso_outputs_baseline = utils.batch_apply(
       self._torso, (prev_actions, env_outputs))
 
     initial_core_state = self._core.get_initial_state(
-      batch_size=tf.shape(torso_outputs)[1], dtype=tf.float32)
+      batch_size=tf.shape(torso_outputs_policy)[1], dtype=tf.float32)
     core_output_list = []
-    for input_, d in zip(tf.unstack(torso_outputs), tf.unstack(done)):
+    for input_, d in zip(tf.unstack(torso_outputs_policy), tf.unstack(done)):
       # If the episode ended, the core state should be reset before the next.
       core_state = tf.nest.map_structure(
         lambda x, y, d=d: tf.where(
@@ -197,7 +241,10 @@ class GFootball(BaseVTraceNetwork):
       core_output = self._mlp_after_lstm(core_output)
       core_output_list.append(core_output)
     outputs = tf.stack(core_output_list)
-
+    if self._separate_baseline:
+      outputs = (outputs, torso_outputs_baseline)
+    else:
+      outputs = (outputs, outputs)
     return utils.batch_apply(self._head, (outputs,)), core_state
 
 
@@ -205,5 +252,7 @@ def create_network(network_config):
   net = GFootball(network_config['action_space'].nvec,
                   mlp_sizes=network_config['mlp_sizes'],
                   lstm_sizes=network_config['lstm_sizes'],
+                  heads_specs=network_config['heads_specs'],
+                  baseline_specs=network_config['baseline_specs'],
                   sample_actions=network_config['sample_actions'])
   return net
