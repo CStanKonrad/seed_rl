@@ -166,7 +166,7 @@ class GFootball(BaseVTraceNetwork):
       for num_ch, num_blocks in [(16, 2), (32, 2), (32, 2), (32, 2)]
     ]
 
-    self._self_conv_to_linear = make_conv_to_linear(conv_to_linear)
+    self._conv_to_linear = make_conv_to_linear(conv_to_linear)
 
     self._core = tf.keras.layers.StackedRNNCells(
       [tf.keras.layers.LSTMCell(size) for size in lstm_sizes])
