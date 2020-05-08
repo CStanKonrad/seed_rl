@@ -82,18 +82,8 @@ def make_heads(action_specs, heads_specs):
     action_layer = tf.keras.layers.Dense(action_spec, name='policy_logits', kernel_initializer='lecun_normal')
 
     seq_layers = tf.keras.Sequential(mlp_layers + [action_layer])
-
-    def apply_head(data):
-      if conv_stacks is not None:
-        for stack in conv_stacks:
-          data = stack(data)
-
-        data = tf.nn.relu(data)
-        data = tf.keras.layers.Flatten()(data)
-
-      return seq_layers(data)
     
-    return apply_head
+    return (conv_stacks, seq_layers)
 
   result = []
   if len(heads_specs) == 1:
@@ -106,7 +96,17 @@ def make_heads(action_specs, heads_specs):
 
 def apply_net(action_specs, policy_logits, core_output):
   n_actions = len(action_specs)
-  arr = [policy_logits[i](core_output) for i in range(n_actions)]
+  arr = []
+  for cs, sl in policy_logits:
+    data = core_output
+    if cs is not None:
+      for stack in cs:
+        data = stack(data)
+
+      data = tf.nn.relu(data)
+      data = tf.keras.layers.Flatten()(data)
+    arr.append(sl(data))
+    
   arr = tf.stack(arr)
   arr = tf.transpose(arr, perm=[1, 0, 2])
   return arr
