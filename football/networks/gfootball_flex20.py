@@ -233,6 +233,8 @@ class GFootball(BaseVTraceNetwork):
       self._policy_logits,
       core_output_policy)
 
+    core_output_baseline = tf.nn.relu(core_output_baseline)
+    core_output_baseline = tf.keras.layers.Flatten()(core_output_baseline)
     if self._baseline_grad_stop:
       baseline = tf.squeeze(self._baseline(tf.stop_gradient(core_output_baseline)), axis=-1)
     else:
