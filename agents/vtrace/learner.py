@@ -427,7 +427,7 @@ def learner_loop(create_env_fn, create_agent_fn, create_optimizer_fn):
         for value in tf.split(values,
                               values.shape[0] // FLAGS.log_episode_frequency):
           tf.summary.scalar(key, tf.reduce_mean(value))
-
+      agent.write_summaries()
       for (frames, ep_return, raw_return) in zip(*episode_stats):
         logging.info('Return: %s Raw return: %f Frames: %i', ep_return.numpy(),
                      raw_return, frames)
