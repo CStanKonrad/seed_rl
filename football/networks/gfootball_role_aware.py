@@ -14,12 +14,13 @@
 
 """SEED agent using Keras."""
 
-import collections
-from seed_rl.common import utils
 from seed_rl.football import observation
 import tensorflow as tf
+from seed_rl.common import utils
+import numpy as np
 
 from .base_vtrace_network import AgentOutput, BaseVTraceNetwork
+
 
 class _Stack(tf.Module):
   """Stack of pooling and convolutional blocks with residual connections."""
@@ -61,17 +62,55 @@ class _Stack(tf.Module):
     return conv_out
 
 
+def make_logits(layer_fn, action_specs):
+  return [layer_fn(n, 'policy_logits') for n in action_specs]
+
+
+def apply_net(action_specs, policy_logits, core_output):
+  n_actions = len(action_specs)
+  arr = [policy_logits[i](core_output) for i in range(n_actions)]
+  arr = tf.stack(arr)
+  arr = tf.transpose(arr, perm=[1, 0, 2])
+  return arr
+
+
+def post_process_logits(action_specs, policy_logits):
+  all_logits = np.sum(action_specs)
+  new_shape = policy_logits.shape[:-2] + [all_logits]
+  return tf.reshape(policy_logits, new_shape)
+
+
+def choose_action(action_specs, policy_logits, sample=True):
+  n_actions = len(action_specs)
+  policy_logits = tf.transpose(policy_logits, perm=[1, 0, 2])
+
+  if not sample:
+    new_action = tf.stack([
+      tf.math.argmax(
+        policy_logits[i], -1, output_type=tf.int64) for i in range(n_actions)])
+  else:
+    new_action = tf.stack([tf.squeeze(
+      tf.random.categorical(
+        policy_logits[i], 1, dtype=tf.int64), 1) for i in range(n_actions)])
+
+  new_action = tf.transpose(new_action, perm=[1, 0])
+  return new_action
+
+
 class GFootball(BaseVTraceNetwork):
   """Agent with ResNet, but without LSTM and additional inputs.
 
   Four blocks instead of three in ImpalaAtariDeep.
   """
 
-  def __init__(self, parametric_action_distribution):
+  def __init__(self, action_specs):
     super(GFootball, self).__init__(name='gfootball')
 
+    self._config = {'sample_actions': True}
+
     # Parameters and layers for unroll.
-    self._parametric_action_distribution = parametric_action_distribution
+
+    self._action_specs = action_specs
 
     # Parameters and layers for _torso.
     self._stacks = [
@@ -82,24 +121,42 @@ class GFootball(BaseVTraceNetwork):
       256, kernel_initializer='lecun_normal')
 
     # Layers for _head.
-    self._policy_logits = tf.keras.layers.Dense(
-        self._parametric_action_distribution.param_size,
-        name='policy_logits',
-        kernel_initializer='lecun_normal')
+    self._policy_logits = make_logits(
+      lambda num_units, name: tf.keras.layers.Dense(
+        num_units,
+        name=name,
+        kernel_initializer='lecun_normal'),
+      self._action_specs)
 
     self._baseline = tf.keras.layers.Dense(
       1, name='baseline', kernel_initializer='lecun_normal')
+    
+    self._process_role = tf.keras.Sequential([
+        tf.keras.layers.Dense(16, activation='relu', name='baseline', kernel_initializer='lecun_normal'),
+        tf.keras.layers.Dense(8, activation='relu', name='baseline', kernel_initializer='lecun_normal')])
 
   @tf.function
   def initial_state(self, batch_size):
     return ()
 
+  def change_config(self, new_config):
+    self._config = new_config
+
   def _torso(self, unused_prev_action, env_output):
     _, _, frame = env_output
 
     frame = observation.unpackbits(frame)
+    
     frame /= 255
+    
+    # Beware that this needs an appriopriate wrapper in gfootball
+    # and only supports 4 info layers stacked 4 times plus one role layer
+    #print(frame.shape)
+    one_hot_role = frame[:, 0, 0:10, 16] # there are 10 roles https://github.com/google-research/football/blob/master/gfootball/doc/observation.md
+    frame = frame[:, :, :, 0:16]
 
+    #print(frame.shape, frame)
+    #print(one_hot_role.numpy())
     conv_out = frame
     for stack in self._stacks:
       conv_out = stack(conv_out)
@@ -108,44 +165,32 @@ class GFootball(BaseVTraceNetwork):
     conv_out = tf.keras.layers.Flatten()(conv_out)
 
     conv_out = self._conv_to_linear(conv_out)
-    return tf.nn.relu(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+    
+    roles_out = self._process_role(one_hot_role)
+
+    output = tf.concat((conv_out, roles_out), axis=-1)
+    return output
 
   def _head(self, core_output):
-    policy_logits = self._policy_logits(core_output)
+    policy_logits = apply_net(
+      self._action_specs,
+      self._policy_logits,
+      core_output)
     baseline = tf.squeeze(self._baseline(core_output), axis=-1)
 
     # Sample an action from the policy.
-    new_action = self._parametric_action_distribution.sample(policy_logits)
+    new_action = choose_action(self._action_specs, policy_logits, self._config['sample_actions'])
 
-    return AgentOutput(new_action, policy_logits, baseline)
-
-  # Not clear why, but if "@tf.function" declarator is placed directly onto
-  # __call__, training fails with "uninitialized variable *baseline".
-  # when running on multiple learning tpu cores.
-
+    return AgentOutput(new_action, post_process_logits(self._action_specs, policy_logits), baseline)
 
   @tf.function
   def get_action(self, *args, **kwargs):
     return self.__call__(*args, **kwargs)
 
-  def __call__(self, prev_actions, env_outputs, core_state, unroll=False,
-               is_training=False, postprocess_action=True):
-    if not unroll:
-      # Add time dimension.
-      prev_actions, env_outputs = tf.nest.map_structure(
-          lambda t: tf.expand_dims(t, 0), (prev_actions, env_outputs))
-
+  def __call__(self, prev_actions, env_outputs, core_state, unroll,
+               is_training, postprocess_action):
     outputs, core_state = self._unroll(prev_actions, env_outputs, core_state)
-
-    if not unroll:
-      # Remove time dimension.
-      outputs = tf.nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
-
-    if postprocess_action:
-      outputs = outputs._replace(
-          action=self._parametric_action_distribution.postprocess(
-              outputs.action))
-
     return outputs, core_state
 
   def _unroll(self, prev_actions, env_outputs, core_state):
@@ -154,5 +199,6 @@ class GFootball(BaseVTraceNetwork):
 
 
 def create_network(network_config):
-  net = GFootball(network_config['parametric_action_distribution'])
+  net = GFootball(network_config['action_space'].nvec)
+  net.change_config(network_config)
   return net

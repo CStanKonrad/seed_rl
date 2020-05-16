@@ -28,6 +28,10 @@ from seed_rl.football import networks
 from seed_rl.football.networks.gfootball import create_network as GFootball
 from seed_rl.football.networks.gfootball_lstm import create_network as GFootballLSTM
 from seed_rl.football.networks.gfootball_lite import create_network as GFootballLite
+from seed_rl.football.networks.vtrace_mlp_and_lstm import create_network as VtraceMLPandLSTM
+from seed_rl.football.networks.gfootball_flex import create_network as GFootballFlex
+from seed_rl.football.networks.gfootball_flex20 import create_network as GFootballFlex20
+from seed_rl.football.networks.gfootball_role_aware import create_network as GFootballRoleAware
 import tensorflow as tf
 
 
@@ -41,6 +45,10 @@ KNOWN_NETWORKS = {
   'GFootball': GFootball,
   'GFootballLSTM': GFootballLSTM,
   'GFootballLite': GFootballLite,
+  'GFootballFlex': GFootballFlex,
+  'GFootballFlex20': GFootballFlex20,
+  'GFootballRoleAware': GFootballRoleAware,
+  'VtraceMLPandLSTM': VtraceMLPandLSTM
 }
 
 
@@ -51,11 +59,13 @@ def create_agent(action_space, env_observation_space,
   network_config['env_observation_space'] = env_observation_space
   network_config['parametric_action_distribution'] = parametric_action_distribution
 
-  network_name = network_config['network_name'] if 'network_name' in network_config else 'GFootball'
-  logging.warning('WARNING: NO NETWORK NAME PROVIDED, DEFAULT WILL BE USED')
+  if 'network_name' in network_config:
+    network_name = network_config['network_name']
+  else:
+    network_name = 'GFootball'
+    logging.warning('WARNING: NO NETWORK NAME PROVIDED, DEFAULT WILL BE USED')
 
   logging.info('Creating network %s with parameters: %s', network_name, str(network_config))
-
 
   return KNOWN_NETWORKS[network_name](network_config)
 

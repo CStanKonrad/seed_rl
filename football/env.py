@@ -30,6 +30,29 @@ flags.DEFINE_string('env_config',
                     'json with env config')
 flags.DEFINE_integer('num_action_repeats', 1, 'Number of action repeats.')
 
+flags.DEFINE_string('observation_compressor', 'Auto',
+                    "Function/Wrapper used for compressing observation"
+                    "note that network should decompress observation")
+
+
+def auto_deduce_compression(env):
+  rank = len(env.observation_space.shape)
+  if rank == 2:
+    logging.info('BEWARE: auto_deduce_compression: Id (None)')
+    return env
+  elif rank == 4:
+    logging.info('BEWARE: auto_deduce_compression: PacketBitsObservation')
+    return observation.PackedBitsObservation(env)
+  else:
+    raise Exception('Cannot deduce compresor from env observation space:' + \
+                    str(env.observation_space))
+
+KNOWN_OBSERVATION_COMPRESSORS = {
+  'PackedBitsObservation': observation.PackedBitsObservation,
+  'Id': lambda x: x,
+  'Auto': auto_deduce_compression
+}
+
 
 def create_environment(_, env_logdir='', actor_id=None):
   """Returns a gym Football environment."""
@@ -40,8 +63,10 @@ def create_environment(_, env_logdir='', actor_id=None):
     config['base_logdir'] = env_logdir
     config['actor_id'] = actor_id
   else:
-      config['base_logdir'] = None
-      config['actor_id'] = None
-  # todo move PackedBitsObservation somewhere else
-  return observation.PackedBitsObservation(
-    gym.make('gfootball_zpp:gfootball-custom-v1', **config))
+    config['base_logdir'] = None
+    config['actor_id'] = None
+
+  compresor = KNOWN_OBSERVATION_COMPRESSORS[FLAGS.observation_compressor]
+  env = gym.make('gfootball_zpp:gfootball-custom-v1', **config)
+  env = compresor(env)
+  return env
