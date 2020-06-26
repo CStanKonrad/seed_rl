@@ -3,7 +3,7 @@ import tensorflow as tf
 import time
 from absl import logging
 from seed_rl.common.utils import EnvOutput
-# from seed_rl.football import observation as observation_processor
+
 import collections
 from seed_rl.common.parametric_distribution import ParametricDistribution, get_parametric_distribution_for_action_space
 import numpy as np
@@ -79,10 +79,10 @@ class NNMDistributionWrapper(ParametricDistribution):
     log_probs = dist.log_prob(actions)
     log_probs -= self._original_distribution._postprocessor.forward_log_det_jacobian(
       tf.cast(actions, tf.float32), event_ndims=0)
-    # logging.info('Log probs ungrouped %s', str(log_probs))
+
     if self._original_distribution._event_ndims == 1:
       log_probs = self._action_log_probs_grouping_fn(log_probs)
-    # logging.info('Log probs grouped %s', str(log_probs))
+
     return log_probs
 
   def entropy(self, parameters):
@@ -165,7 +165,7 @@ class NNManager(tf.Module):
 
     self._network = [create_agent_fn(self._network_action_space[i], (), self._network_action_distribution[i],
                                      extended_network_config=self._network_config[i]) for i in
-                     range(self._num_networks)]  # todo change () to proper observation_space priority: low
+                     range(self._num_networks)]
 
     # by default iteration number is picked from  optimizer of the first network
     # if the first network is not updated then NNManager handles iterations manually
@@ -226,7 +226,7 @@ class NNManager(tf.Module):
   def get_networks_trainable_variables(self):
     return self._networks_trainable_variables
 
-  def get_action_groups(self):  # todo asserts
+  def get_action_groups(self):
     groups = []
     for i in self._observation_to_network_mapping:
       groups.append(self._network_action_spec[i][1] - self._network_action_spec[i][0])
@@ -266,7 +266,7 @@ class NNManager(tf.Module):
       self._iterations.assign(self._iterations + 1)
 
   @tf.function
-  def initial_state(self, batch_size):  # todo check
+  def initial_state(self, batch_size):
     result_state = []
     for net_num in self._observation_to_network_mapping:
       result_state.append(self._network[net_num].initial_state(batch_size))
@@ -325,14 +325,12 @@ class NNManager(tf.Module):
     self._save_nn_manager()
 
   def adjust_discounts(self, discounts):
-    # logging.info('discounts before %s', str(discounts))
     if not self._single_agent:
       discounts = tf.expand_dims(discounts, -1)
       rep_m = [1] * len(discounts.shape)
       rep_m[-1] = self.get_number_of_agents()
       discounts = tf.tile(discounts, rep_m)
 
-    # logging.info('discounts after %s', str(discounts))
     return discounts
 
   def vtrace_adjust_loss(self, loss):
@@ -344,17 +342,14 @@ class NNManager(tf.Module):
       # Add time dimension.
       input_ = tf.nest.map_structure(lambda t: tf.expand_dims(t, 0), input_)
 
-    # logging.info('Preparing input %s', str(input_))
     if self._single_agent:
       return [input_]
     else:
       prev_actions, env_outputs = input_
 
-      # logging.info('Called with prev_action before mangle %s', str(prev_actions))
       prev_actions = prefix_permute(prev_actions, [2, 0, 1])
       prev_actions = group_tensors(prev_actions, self.get_action_groups())
       prev_actions = tf.nest.map_structure(lambda t: tf.transpose(t, perm=[1, 2, 0]), prev_actions)
-      # logging.info('Called with prev_action after mangle %s', str(prev_actions))
 
       done = env_outputs.done
 
@@ -365,7 +360,6 @@ class NNManager(tf.Module):
       for i in range(num_observations):
         input_.append((prev_actions[i], EnvOutput(env_outputs.reward[:, :, i], done, env_outputs.observation[:, :, i])))
 
-      # logging.info('Processed input %s', str(input_))
 
       return input_
 
@@ -380,8 +374,6 @@ class NNManager(tf.Module):
       baseline = prefix_permute(baseline, [1, 2, 0])
 
     output = AgentOutput(new_action, policy_logits, baseline)
-
-    # logging.info('Ends with after mangle output %s', str(output))
 
     if not unroll:
       # Remove time dimension.
@@ -403,12 +395,10 @@ class NNManager(tf.Module):
     new_core_state = [None] * num_agents
     for i in range(num_agents):
       net_num = self._observation_to_network_mapping[i]
-      # logging.info('for %d net %d', i, net_num)
 
       o, s = self._network[net_num](*input_[i], core_state[i], unroll=True,
                                     is_training=is_training,
                                     postprocess_action=postprocess_action)
-      # logging.info('o %s', str(o))
 
       new_core_state[i] = s
 
@@ -416,8 +406,6 @@ class NNManager(tf.Module):
       policy_logits.append(o.policy_logits)
       baseline.append(o.baseline)
 
-    # logging.info('Ends with before mangle new_actions %s', str(new_action))
-    # logging.info('Ends with before mangle policy_logits %s', str(policy_logits))
 
     output = self._prepare_call_output(new_action, policy_logits, baseline, unroll)
 

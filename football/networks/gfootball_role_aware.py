@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This is a modified version of the original SEED network
+
 """SEED agent using Keras."""
 
 from seed_rl.football import observation
@@ -155,8 +157,6 @@ class GFootball(BaseVTraceNetwork):
     one_hot_role = frame[:, 0, 0:10, 16] # there are 10 roles https://github.com/google-research/football/blob/master/gfootball/doc/observation.md
     frame = frame[:, :, :, 0:16]
 
-    #print(frame.shape, frame)
-    #print(one_hot_role.numpy())
     conv_out = frame
     for stack in self._stacks:
       conv_out = stack(conv_out)
