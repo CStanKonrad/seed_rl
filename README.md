@@ -1,3 +1,6 @@
+# Notice
+This repository contains a modified version of SEED, to get the orginal one you should check [this repository](https://github.com/google-research/seed_rl)
+
 # SEED
 
 This repository contains an implementation of distributed reinforcement learning

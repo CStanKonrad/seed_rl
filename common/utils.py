@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This is a modified version of the original file
+
 """Utility functions/classes."""
 
 import collections
@@ -84,9 +86,7 @@ def init_learner(num_training_tpus):
   else:
     tf.device('/cpu').__enter__()
     any_gpu = tf.config.experimental.list_logical_devices('GPU')
-    #gpus = tf.config.experimental.list_logical_devices('GPU')
     device_name = '/device:GPU:0' if any_gpu else '/device:CPU:0'
-    #gpu_names = [g.name for g in gpus]
     strategy = tf.distribute.MirroredStrategy()
     enc = lambda x: x
     dec = lambda x, s=None: x if s is None else tf.nest.pack_sequence_as(s, x)
@@ -479,13 +479,11 @@ class ProgressLogger(object):
 
   def step_end(self, session, strategy=None, step_increment=1):
     logs = []
-    # logging.info('####Session: %s', str(session))
     for value in session:
       if strategy:
         value = tf.reduce_mean(tf.cast(
             strategy.experimental_local_results(value)[0], tf.float32))
       logs.append(value)
-    # logging.info('####Logs: %s', str(logs))
     self.ready_values.assign(logs)
     self.step_cnt.assign_add(step_increment)
 
