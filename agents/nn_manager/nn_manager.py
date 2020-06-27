@@ -49,7 +49,7 @@ def group_log_probs(log_probs, grouping):
     index += g
   return tf.stack(output, axis=-1)
 
-
+# based on ParametricDistribuion from https://github.com/CStanKonrad/seed_rl/blob/current_setup/common/parametric_distribution.py
 class NNMDistributionWrapper(ParametricDistribution):
   def __init__(self, original_distribution, action_log_probs_grouping_fn):
     self._original_distribution = original_distribution
